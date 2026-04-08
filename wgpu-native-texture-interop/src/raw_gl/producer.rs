@@ -25,7 +25,7 @@ use crate::{
 ///
 /// - **Linux/Android**: Imports via Vulkan external memory (requires Vulkan host backend)
 /// - **Windows**: Imports via Vulkan external memory with NT handles (requires Vulkan host backend)
-/// - **Apple**: Not supported (use [`super::metal::MetalImporter`] with IOSurface instead)
+/// - **Apple**: Not supported (use `raw_gl::metal::MetalImporter` with IOSurface instead)
 ///
 /// # Example
 ///

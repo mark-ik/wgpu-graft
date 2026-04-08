@@ -7,7 +7,7 @@
 //! 4. Blitting from the source FBO to the shared GL texture
 //! 5. Wrapping the Vulkan image as a `wgpu::Texture`
 //!
-//! This is the Windows equivalent of [`super::linux::import_gl_framebuffer_vulkan`].
+//! This is the Windows equivalent of `raw_gl::linux::import_gl_framebuffer_vulkan`.
 //! Requires the host wgpu device to use the Vulkan backend (not DX12).
 
 use ash::vk;

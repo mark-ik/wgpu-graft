@@ -636,6 +636,9 @@ fn import_dx12_shared_texture(
 
 fn detect_backend(device: &wgpu::Device) -> InteropBackend {
     unsafe {
+        // wgpu::wgc::api::Vulkan is only compiled in when the hal `vulkan` cfg
+        // is set — i.e. Linux, Android, and Windows (not macOS).
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
         if device.as_hal::<wgpu::wgc::api::Vulkan>().is_some() {
             return InteropBackend::Vulkan;
         }

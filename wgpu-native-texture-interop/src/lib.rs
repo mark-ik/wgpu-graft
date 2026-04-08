@@ -550,7 +550,9 @@ fn import_metal_texture_ref(
 }
 
 fn import_dx12_shared_texture(
+    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
     frame: &Dx12SharedTexture,
+    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
     host: &HostWgpuContext,
 ) -> Result<ImportedTexture, InteropError> {
     #[cfg(target_os = "windows")]

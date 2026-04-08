@@ -1,0 +1,23 @@
+[package]
+name = "servo-wgpu-interop-adapter"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mark-ik/wgpu-gui-bridge"
+description = "Servo-specific offscreen rendering adapter built on wgpu-native-texture-interop"
+
+[features]
+default = []
+servo = ["dep:libservo"]
+
+[dependencies]
+euclid = "0.22.11"
+gleam = "0.15.1"
+glow = "0.16.0"
+image = "0.25.8"
+rustls = "0.23.37"
+surfman = { version = "0.11.0", features = ["chains"] }
+winit = "0.30.12"
+wgpu = { version = "28.0.0", features = ["metal"] }
+wgpu-native-texture-interop = { path = "../wgpu-native-texture-interop" }
+libservo = { git = "https://github.com/servo/servo", tag = "v0.0.6", optional = true }

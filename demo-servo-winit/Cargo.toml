@@ -1,0 +1,18 @@
+[package]
+name = "demo-servo-winit"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Minimal winit + wgpu proof host for servo-wgpu-interop"
+
+[dependencies]
+euclid = "0.22.11"
+image = "0.25"
+libservo = { git = "https://github.com/servo/servo", tag = "v0.0.6" }
+pollster = "0.4.0"
+rustls = "0.23.37"
+servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", features = ["servo"] }
+url = "2.5.7"
+wgpu = { version = "28.0.0", features = ["metal"] }
+wgpu-native-texture-interop = { path = "../wgpu-native-texture-interop" }
+winit = "0.30.12"

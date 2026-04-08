@@ -1,0 +1,10 @@
+This project includes code originally derived from the Slint Servo
+embedding example.
+
+  Copyright (c) SixtyFPS GmbH <info@slint.dev>
+  Licensed under MIT OR Apache-2.0
+  https://github.com/slint-ui/slint
+
+The core texture interop crate (wgpu-native-texture-interop) and the
+Servo adapter (servo-wgpu-interop-adapter) were extracted and extended
+from that example. The original license terms are preserved.

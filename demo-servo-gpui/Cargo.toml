@@ -1,0 +1,20 @@
+[package]
+name = "demo-servo-gpui"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Demo embedding Servo in a GPUI application with URL bar and input forwarding"
+
+[dependencies]
+euclid = "0.22.11"
+# Use default-features = false to avoid wayland/x11 features pulling in
+# blade-graphics → naga v25 which activates codespan-reporting/termcolor.
+# That feature unification would break naga v26 (used by wgpu 26).
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "windows-manifest"] }
+image = "0.25"
+libservo = { git = "https://github.com/servo/servo", tag = "v0.0.6" }
+rustls = "0.23.37"
+servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", features = ["servo"] }
+smallvec = "1"
+url = "2.5.7"
+winit = "0.30.12"

@@ -1,0 +1,44 @@
+[package]
+name = "wgpu-native-texture-interop"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mark-ik/wgpu-gui-bridge"
+description = "Native texture interop helpers for importing offscreen producer frames into host-owned wgpu textures"
+
+[features]
+default = ["surfman"]
+surfman = ["dep:euclid", "dep:gleam", "dep:image", "dep:surfman"]
+
+[dependencies]
+thiserror = "2.0.17"
+wgpu = { version = "28.0.0", features = ["metal"] }
+wgpu-hal = "28.0.0"
+euclid = { version = "0.22.11", optional = true }
+gleam = { version = "0.15.1", optional = true }
+glow = "0.16.0"
+image = { version = "0.25.8", optional = true }
+surfman = { version = "0.11.0", features = ["chains"], optional = true }
+winit = "0.30.12"
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))'.dependencies]
+ash = "0.38.0"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+] }
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+foreign-types-shared = "0.3.1"
+metal = "0.33.0"
+objc2 = "0.6.3"
+objc2-foundation = "0.3.2"
+objc2-io-surface = "0.3.2"
+objc2-metal = { version = "0.3.2", features = ["MTLDevice", "MTLAllocation", "MTLResource", "MTLTexture", "objc2-io-surface"] }
+
+[build-dependencies]
+gl_generator = "0.14.0"

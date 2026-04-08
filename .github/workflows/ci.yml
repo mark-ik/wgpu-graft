@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  check:
+    name: Check and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      # Check the core library without the surfman feature (no heavy deps)
+      - name: cargo check (no-default-features)
+        run: cargo check -p wgpu-native-texture-interop --no-default-features
+
+      # Check with surfman enabled (pulls in gleam/euclid/surfman)
+      - name: cargo check (all features)
+        run: cargo check -p wgpu-native-texture-interop --all-features
+
+      # Run the pure-logic unit tests (no GPU required)
+      - name: cargo test
+        run: cargo test -p wgpu-native-texture-interop
+
+      # Check the raw-GL demo compiles (no Servo dep, no hardware needed)
+      - name: cargo check demo-raw-gl
+        run: cargo check -p demo-raw-gl
+
+      # Verify docs build cleanly
+      - name: cargo doc
+        run: cargo doc -p wgpu-native-texture-interop --no-deps --no-default-features
+        env:
+          RUSTDOCFLAGS: -D warnings

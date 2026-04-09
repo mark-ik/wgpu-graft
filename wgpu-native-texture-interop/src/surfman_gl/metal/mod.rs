@@ -16,7 +16,7 @@ pub(super) fn import_current_frame(
 
     let surface = device
         .unbind_surface_from_context(&mut context)
-        .map_err(|err| InteropError::Surfman(err.to_string()))?
+        .map_err(|err| InteropError::Surfman(format!("{err:?}")))?
         .ok_or(InteropError::InvalidFrame("no surfman surface available"))?;
 
     let native_surface = device.native_surface(&surface);

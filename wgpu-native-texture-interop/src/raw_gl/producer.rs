@@ -118,6 +118,7 @@ impl FrameProducer for RawGlFrameProducer {
     }
 }
 
+#[allow(dead_code)]
 struct RawGlImportImpl {
     gl: Arc<glow::Context>,
     proc_loader: Rc<dyn Fn(&str) -> *const c_void>,
@@ -147,6 +148,7 @@ impl GlFramebufferSourceImpl for RawGlImportImpl {
 }
 
 impl RawGlImportImpl {
+    #[allow(unused_variables)]
     fn import_texture(&self, host: &HostWgpuContext) -> Result<wgpu::Texture, InteropError> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if host.backend == crate::InteropBackend::Vulkan {

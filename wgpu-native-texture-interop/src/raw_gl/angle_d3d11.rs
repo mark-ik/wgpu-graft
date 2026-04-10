@@ -41,7 +41,7 @@ use std::ffi::c_void;
 use ash::vk;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
-use winit::dpi::PhysicalSize;
+use dpi::PhysicalSize;
 
 use crate::{HostWgpuContext, InteropError};
 

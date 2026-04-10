@@ -4,7 +4,7 @@
 //! via a fullscreen-triangle render pass. Handles BGRA-to-RGBA conversion and
 //! Y-flip in a single draw call.
 
-use winit::dpi::PhysicalSize;
+use dpi::PhysicalSize;
 
 /// Caches the wgpu pipeline state for normalizing imported textures.
 ///
@@ -89,7 +89,7 @@ impl ImportedTextureNormalizer {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("texture-normalize-pipeline-layout"),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[Some(&bind_group_layout)],
             immediate_size: 0,
         });
 

@@ -85,6 +85,12 @@ impl SurfmanFrameContext {
         Ok(())
     }
 
+    pub fn unbind_surface(&self) -> Result<Option<Surface>, Error> {
+        let device = &self.device.borrow();
+        let context = &mut self.context.borrow_mut();
+        device.unbind_surface_from_context(context)
+    }
+
     pub fn create_attached_swap_chain(&self) -> Result<SwapChain<Device>, Error> {
         let device = &mut self.device.borrow_mut();
         let context = &mut self.context.borrow_mut();

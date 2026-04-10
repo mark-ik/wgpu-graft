@@ -8,7 +8,7 @@ use std::ffi::c_void;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use winit::dpi::PhysicalSize;
+use dpi::PhysicalSize;
 
 use crate::{
     FrameProducer, GlFramebufferSource, GlFramebufferSourceImpl, HostWgpuContext, ImportOptions,
@@ -33,7 +33,7 @@ use crate::{
 /// use std::sync::Arc;
 /// use wgpu_native_texture_interop::raw_gl::producer::RawGlFrameProducer;
 /// use wgpu_native_texture_interop::{WgpuTextureImporter, HostWgpuContext, ImportOptions};
-/// use winit::dpi::PhysicalSize;
+/// use dpi::PhysicalSize;
 ///
 /// let host = HostWgpuContext::new(device, queue);
 /// let importer = WgpuTextureImporter::new(host);

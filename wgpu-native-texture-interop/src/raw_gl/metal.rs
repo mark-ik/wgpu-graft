@@ -10,7 +10,7 @@ use objc2::runtime::NSObject;
 use objc2::{msg_send, rc::Retained};
 use objc2_io_surface::IOSurfaceRef;
 use objc2_metal::{MTLPixelFormat, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage};
-use winit::dpi::PhysicalSize;
+use dpi::PhysicalSize;
 
 use crate::InteropError;
 

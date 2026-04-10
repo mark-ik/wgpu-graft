@@ -9,7 +9,7 @@
 use ash::vk;
 use glow::HasContext;
 use std::ffi::c_void;
-use winit::dpi::PhysicalSize;
+use dpi::PhysicalSize;
 
 use crate::{HostWgpuContext, InteropError, gl_bindings as gl};
 

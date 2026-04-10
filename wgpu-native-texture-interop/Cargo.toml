@@ -12,14 +12,14 @@ surfman = ["dep:euclid", "dep:gleam", "dep:image", "dep:surfman"]
 
 [dependencies]
 thiserror = "2.0.17"
-wgpu = { version = "28.0.0", features = ["metal"] }
-wgpu-hal = "28.0.0"
+wgpu = { version = "29.0.1", features = ["metal"] }
+wgpu-hal = "29.0.1"
 euclid = { version = "0.22.11", optional = true }
 gleam = { version = "0.15.1", optional = true }
 glow = "0.16.0"
-image = { version = "0.25.8", optional = true }
+image = { version = "0.25", optional = true }
 surfman = { version = "0.11.0", features = ["chains"], optional = true }
-winit = "0.30.12"
+dpi = "0.1.2"
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))'.dependencies]
 ash = "0.38.0"

@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 pub use error::{InteropError, UnsupportedReason};
 pub use sync::{ImplicitOnlySynchronizer, InteropSynchronizer, NoopSynchronizer, SyncMechanism};
-use winit::dpi::PhysicalSize;
+use dpi::PhysicalSize;
 
 /// The wgpu graphics backend in use on the host device.
 ///
@@ -204,7 +204,7 @@ impl GlFramebufferSource {
         self.producer_sync
     }
 
-    pub(crate) fn new(
+    pub fn new(
         size: PhysicalSize<u32>,
         generation: u64,
         producer_sync: SyncMechanism,
@@ -457,7 +457,7 @@ impl CapabilityMatrix {
     }
 }
 
-trait GlFramebufferSourceImpl {
+pub trait GlFramebufferSourceImpl {
     fn import_into(
         &self,
         frame: &GlFramebufferSource,

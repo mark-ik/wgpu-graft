@@ -12,7 +12,7 @@ mod windows;
 use std::cell::Cell;
 use std::rc::Rc;
 
-use winit::dpi::PhysicalSize;
+use dpi::PhysicalSize;
 
 use crate::{
     FrameProducer, GlFramebufferSource, GlFramebufferSourceImpl, HostWgpuContext, ImportOptions,

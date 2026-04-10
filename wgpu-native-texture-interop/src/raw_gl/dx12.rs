@@ -26,7 +26,7 @@ use windows::Win32::Graphics::Dxgi::{
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SAMPLE_DESC,
 };
-use winit::dpi::PhysicalSize;
+use dpi::PhysicalSize;
 
 use crate::{HostWgpuContext, InteropError, gl_bindings as gl};
 

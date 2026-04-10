@@ -260,9 +260,12 @@ impl AppState {
         };
 
         // --- Create wgpu device with Vulkan backend ---
-        let wgpu_instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let wgpu_instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
-            ..Default::default()
+            flags: wgpu::InstanceFlags::default(),
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+            backend_options: wgpu::BackendOptions::default(),
+            display: None,
         });
 
         let wgpu_surface = wgpu_instance.create_surface(window.clone())?;
@@ -363,7 +366,7 @@ impl AppState {
         let blit_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
-                bind_group_layouts: &[&blit_bind_group_layout],
+                bind_group_layouts: &[Some(&blit_bind_group_layout)],
                 immediate_size: 0,
             });
 
@@ -488,7 +491,11 @@ impl AppState {
             .import_frame(&frame, &ImportOptions::default())?;
 
         // wgpu: present imported texture
-        let surface_tex = self.surface.get_current_texture()?;
+        let surface_tex = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(tex)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
+            other => return Err(format!("Failed to acquire surface texture: {other:?}").into()),
+        };
         let surface_view = surface_tex
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, num::NonZeroU32, rc::Rc, sync::Arc};
 
 use euclid::default::Size2D;
 use gleam::gl::{self, Gl};
@@ -163,6 +163,8 @@ impl SurfmanFrameContext {
             .context_surface_info(context)
             .unwrap_or(None)
             .and_then(|info| info.framebuffer_object)
+            .and_then(|framebuffer| NonZeroU32::new(framebuffer.0.get()))
+            .map(NativeFramebuffer)
     }
 
     fn read_framebuffer_to_image(

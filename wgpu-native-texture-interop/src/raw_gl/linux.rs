@@ -7,9 +7,9 @@
 //! 4. Wrapping the Vulkan image as a `wgpu::Texture`
 
 use ash::vk;
+use dpi::PhysicalSize;
 use glow::HasContext;
 use std::ffi::c_void;
-use dpi::PhysicalSize;
 
 use crate::{HostWgpuContext, InteropError, gl_bindings as gl};
 
@@ -163,12 +163,10 @@ pub fn import_gl_framebuffer_vulkan(
         let read_framebuffer = if source_fbo == 0 {
             None
         } else {
-            Some(
-                glow::NativeFramebuffer(
-                    std::num::NonZeroU32::new(source_fbo)
-                        .ok_or(InteropError::InvalidFrame("invalid FBO id"))?,
-                ),
-            )
+            Some(glow::NativeFramebuffer(
+                std::num::NonZeroU32::new(source_fbo)
+                    .ok_or(InteropError::InvalidFrame("invalid FBO id"))?,
+            ))
         };
 
         gl.bind_framebuffer(gl::DRAW_FRAMEBUFFER, Some(draw_framebuffer));

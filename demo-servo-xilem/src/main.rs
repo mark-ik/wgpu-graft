@@ -19,16 +19,16 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use servo::EventLoopWaker;
 use euclid::Scale;
 use masonry::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 use masonry::theme::default_property_set;
 use masonry_winit::app::{AppDriver, MasonryState, MasonryUserEvent};
 use rustls::crypto::aws_lc_rs;
+use servo::EventLoopWaker;
 use servo::{
-    DevicePoint, InputEvent, MouseButton as ServoMouseButton, MouseButtonAction,
-    MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent, RenderingContext, Servo,
-    ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
+    DevicePoint, InputEvent, MouseButton as ServoMouseButton, MouseButtonAction, MouseButtonEvent,
+    MouseLeftViewportEvent, MouseMoveEvent, RenderingContext, Servo, ServoBuilder, WebView,
+    WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
 };
 use servo_wgpu_interop_adapter::ServoWgpuRenderingContext;
 use tokio::sync::watch;
@@ -133,8 +133,7 @@ struct ServoState {
 impl ServoState {
     fn init(size: PhysicalSize<u32>, initial_url: Url) -> Result<Self, String> {
         let render_ctx = Rc::new(
-            ServoWgpuRenderingContext::new(size)
-                .map_err(|e| format!("surfman error: {e:?}"))?,
+            ServoWgpuRenderingContext::new(size).map_err(|e| format!("surfman error: {e:?}"))?,
         );
 
         let servo = ServoBuilder::default()
@@ -324,9 +323,12 @@ impl ApplicationHandler<MasonryUserEvent> for ServoXilemApp {
                         winit::event::MouseButton::Other(v) => ServoMouseButton::Other(*v),
                     };
                     let pt = self.servo_device_point(nav_h);
-                    ss.webview.notify_input_event(InputEvent::MouseButton(
-                        MouseButtonEvent::new(action, btn, pt.into()),
-                    ));
+                    ss.webview
+                        .notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
+                            action,
+                            btn,
+                            pt.into(),
+                        )));
                 }
 
                 // ── Scroll wheel ─────────────────────────────────────────
@@ -335,15 +337,19 @@ impl ApplicationHandler<MasonryUserEvent> for ServoXilemApp {
                         MouseScrollDelta::LineDelta(x, y) => {
                             ((*x as f64) * 38.0, (*y as f64) * 38.0, WheelMode::DeltaLine)
                         }
-                        MouseScrollDelta::PixelDelta(d) => {
-                            (d.x, d.y, WheelMode::DeltaPixel)
-                        }
+                        MouseScrollDelta::PixelDelta(d) => (d.x, d.y, WheelMode::DeltaPixel),
                     };
                     let pt = self.servo_device_point(nav_h);
-                    ss.webview.notify_input_event(InputEvent::Wheel(WheelEvent::new(
-                        WheelDelta { x: dx, y: dy, z: 0.0, mode },
-                        pt.into(),
-                    )));
+                    ss.webview
+                        .notify_input_event(InputEvent::Wheel(WheelEvent::new(
+                            WheelDelta {
+                                x: dx,
+                                y: dy,
+                                z: 0.0,
+                                mode,
+                            },
+                            pt.into(),
+                        )));
                 }
 
                 // ── Keyboard ─────────────────────────────────────────────
@@ -351,7 +357,9 @@ impl ApplicationHandler<MasonryUserEvent> for ServoXilemApp {
                 // Keyboard events are forwarded regardless of cursor position.
                 // In a production app you would track focus (e.g. only forward
                 // when the viewport image is focused, not the URL bar).
-                WindowEvent::KeyboardInput { event: key_event, .. } => {
+                WindowEvent::KeyboardInput {
+                    event: key_event, ..
+                } => {
                     let servo_event =
                         keyutils::keyboard_event_from_winit(key_event, self.modifiers);
                     ss.webview
@@ -391,7 +399,8 @@ impl ApplicationHandler<MasonryUserEvent> for ServoXilemApp {
             // Handle any pending navigation from the URL bar.
             if let Some(raw_url) = self.nav_request.lock().unwrap().take() {
                 // Auto-prefix https:// when no scheme is provided.
-                let url = Url::parse(&raw_url).or_else(|_| Url::parse(&format!("https://{raw_url}")));
+                let url =
+                    Url::parse(&raw_url).or_else(|_| Url::parse(&format!("https://{raw_url}")));
                 match url {
                     Ok(url) => ss.webview.load(url),
                     Err(_) => eprintln!("invalid URL: {raw_url}"),
@@ -468,8 +477,8 @@ fn main() -> Result<(), EventLoopError> {
         current_image: None,
     };
 
-    let window_options = WindowOptions::new("servo-xilem demo")
-        .with_min_inner_size(LogicalSize::new(800.0, 600.0));
+    let window_options =
+        WindowOptions::new("servo-xilem demo").with_min_inner_size(LogicalSize::new(800.0, 600.0));
 
     // Each rebuild gets a fresh receiver clone; all clones share the same channel.
     // task_raw uses only the first clone (it runs once), which is fine.
@@ -489,11 +498,8 @@ fn main() -> Result<(), EventLoopError> {
     let (driver, windows) =
         xilem.into_driver_and_windows(move |event| proxy.send_event(event).map_err(|e| e.0));
 
-    let masonry_state = MasonryState::new(
-        event_loop.create_proxy(),
-        windows,
-        default_property_set(),
-    );
+    let masonry_state =
+        MasonryState::new(event_loop.create_proxy(), windows, default_property_set());
 
     let mut app = ServoXilemApp {
         masonry_state,
@@ -533,6 +539,5 @@ fn resolve_initial_url() -> Result<Url, String> {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("fixtures")
         .join("animated.html");
-    Url::from_file_path(&fixture)
-        .map_err(|_| format!("fixture not found: {}", fixture.display()))
+    Url::from_file_path(&fixture).map_err(|_| format!("fixture not found: {}", fixture.display()))
 }

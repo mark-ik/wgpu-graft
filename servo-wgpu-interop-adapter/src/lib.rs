@@ -12,11 +12,11 @@ use wgpu_native_texture_interop::{
 use winit::dpi::PhysicalSize;
 
 #[cfg(feature = "servo")]
+pub use image;
+#[cfg(feature = "servo")]
 use servo::{DeviceIntRect, RenderingContext};
 #[cfg(feature = "servo")]
 use surfman::{Surface, SurfaceTexture, chains::PreserveBuffer};
-#[cfg(feature = "servo")]
-pub use image;
 
 pub use wgpu_native_texture_interop::{
     ImportOptions as InteropImportOptions, ImportedTexture as InteropImportedTexture,
@@ -85,10 +85,12 @@ impl ServoWgpuRenderingContext {
     /// Returns `None` if the frame is not available (e.g. no surface bound yet).
     pub fn read_full_frame(&self) -> Option<image::RgbaImage> {
         let size = self.size();
-        self.frame_producer
-            .borrow()
-            .context()
-            .read_to_image_region(0, 0, size.width as i32, size.height as i32)
+        self.frame_producer.borrow().context().read_to_image_region(
+            0,
+            0,
+            size.width as i32,
+            size.height as i32,
+        )
     }
 }
 

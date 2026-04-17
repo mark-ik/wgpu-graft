@@ -110,11 +110,13 @@ impl ApplicationHandler for App {
 
 impl AppState {
     fn new(event_loop: &ActiveEventLoop) -> Result<Self, Box<dyn std::error::Error>> {
-        let window = Arc::new(event_loop.create_window(
-            Window::default_attributes()
-                .with_title("demo-raw-gl (wgpu-native-texture-interop)")
-                .with_inner_size(PhysicalSize::new(800, 600)),
-        )?);
+        let window = Arc::new(
+            event_loop.create_window(
+                Window::default_attributes()
+                    .with_title("demo-raw-gl (wgpu-native-texture-interop)")
+                    .with_inner_size(PhysicalSize::new(800, 600)),
+            )?,
+        );
 
         let fb_size = window.inner_size();
         let rwh = window.window_handle()?.as_raw();
@@ -363,12 +365,11 @@ impl AppState {
             )),
         });
 
-        let blit_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[Some(&blit_bind_group_layout)],
-                immediate_size: 0,
-            });
+        let blit_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[Some(&blit_bind_group_layout)],
+            immediate_size: 0,
+        });
 
         let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("blit-pipeline"),

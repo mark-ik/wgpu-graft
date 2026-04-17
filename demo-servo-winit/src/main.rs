@@ -24,8 +24,8 @@ use euclid::Scale;
 use rustls::crypto::aws_lc_rs;
 use servo::{
     DevicePoint, EventLoopWaker, InputEvent, MouseButton as ServoMouseButton, MouseButtonAction,
-    MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent, Servo,
-    ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
+    MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent, Servo, ServoBuilder, WebView,
+    WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
 };
 use servo_wgpu_interop_adapter::ServoWgpuInteropAdapter;
 use url::Url;
@@ -109,12 +109,9 @@ impl ApplicationHandler<WakerEvent> for App {
         let size = window.inner_size();
         let scale_factor = window.scale_factor();
 
-        let interop = ServoWgpuInteropAdapter::new(
-            renderer.device.clone(),
-            renderer.queue.clone(),
-            size,
-        )
-        .expect("failed to create Servo interop adapter");
+        let interop =
+            ServoWgpuInteropAdapter::new(renderer.device.clone(), renderer.queue.clone(), size)
+                .expect("failed to create Servo interop adapter");
 
         let servo = ServoBuilder::default()
             .event_loop_waker(Box::new(waker.clone()))
@@ -177,7 +174,10 @@ impl ApplicationHandler<WakerEvent> for App {
 
             WindowEvent::Resized(new_size) => {
                 state.renderer.resize(new_size);
-                state.interop.rendering_context_handle().resize_viewport(new_size);
+                state
+                    .interop
+                    .rendering_context_handle()
+                    .resize_viewport(new_size);
                 state.webview.resize(new_size);
                 state.window.request_redraw();
             }
@@ -197,9 +197,11 @@ impl ApplicationHandler<WakerEvent> for App {
             WindowEvent::CursorMoved { position, .. } => {
                 state.cursor_position = position;
                 let point = DevicePoint::new(position.x as f32, position.y as f32);
-                state.webview.notify_input_event(InputEvent::MouseMove(
-                    MouseMoveEvent::new(servo::WebViewPoint::Device(point)),
-                ));
+                state
+                    .webview
+                    .notify_input_event(InputEvent::MouseMove(MouseMoveEvent::new(
+                        servo::WebViewPoint::Device(point),
+                    )));
             }
 
             WindowEvent::CursorLeft { .. } => {
@@ -227,13 +229,13 @@ impl ApplicationHandler<WakerEvent> for App {
                 };
                 let pos = state.cursor_position;
                 let point = DevicePoint::new(pos.x as f32, pos.y as f32);
-                state.webview.notify_input_event(InputEvent::MouseButton(
-                    MouseButtonEvent::new(
+                state
+                    .webview
+                    .notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
                         action,
                         servo_button,
                         servo::WebViewPoint::Device(point),
-                    ),
-                ));
+                    )));
             }
 
             WindowEvent::MouseWheel { delta, .. } => {
@@ -241,25 +243,26 @@ impl ApplicationHandler<WakerEvent> for App {
                     MouseScrollDelta::LineDelta(x, y) => {
                         ((x as f64) * 38.0, (y as f64) * 38.0, WheelMode::DeltaLine)
                     }
-                    MouseScrollDelta::PixelDelta(pos) => {
-                        (pos.x, pos.y, WheelMode::DeltaPixel)
-                    }
+                    MouseScrollDelta::PixelDelta(pos) => (pos.x, pos.y, WheelMode::DeltaPixel),
                 };
                 let pos = state.cursor_position;
                 let point = DevicePoint::new(pos.x as f32, pos.y as f32);
-                state.webview.notify_input_event(InputEvent::Wheel(
-                    WheelEvent::new(
-                        WheelDelta { x: dx, y: dy, z: 0.0, mode },
+                state
+                    .webview
+                    .notify_input_event(InputEvent::Wheel(WheelEvent::new(
+                        WheelDelta {
+                            x: dx,
+                            y: dy,
+                            z: 0.0,
+                            mode,
+                        },
                         servo::WebViewPoint::Device(point),
-                    ),
-                ));
+                    )));
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
                 let kbd = keyutils::keyboard_event_from_winit(&event, state.modifiers);
-                state
-                    .webview
-                    .notify_input_event(InputEvent::Keyboard(kbd));
+                state.webview.notify_input_event(InputEvent::Keyboard(kbd));
             }
 
             _ => {}
@@ -341,8 +344,7 @@ impl Renderer {
         // This is required for the ANGLE D3D11 share handle zero-copy import path.
         // If unsupported, we fall back to the CPU readback path transparently.
         #[cfg(target_os = "windows")]
-        let extra_features = adapter.features()
-            & wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32;
+        let extra_features = adapter.features() & wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32;
         #[cfg(not(target_os = "windows"))]
         let extra_features = wgpu::Features::empty();
 
@@ -354,7 +356,8 @@ impl Renderer {
                     // WebRender's composite shader uses up to @location(17).
                     max_inter_stage_shader_variables: 28,
                     ..wgpu::Limits::default()
-                }.using_resolution(adapter.limits()),
+                }
+                .using_resolution(adapter.limits()),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: wgpu::Trace::Off,

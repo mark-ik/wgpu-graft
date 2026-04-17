@@ -13,9 +13,12 @@ fn copy_angle_dlls_to_binary_dir() {
     // Binary  = {target}/{profile}/
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let binary_dir = Path::new(&out_dir)
-        .parent().unwrap()  // strip "out"
-        .parent().unwrap()  // strip "{crate}-{hash}"
-        .parent().unwrap(); // strip "build"
+        .parent()
+        .unwrap() // strip "out"
+        .parent()
+        .unwrap() // strip "{crate}-{hash}"
+        .parent()
+        .unwrap(); // strip "build"
 
     let build_dir = binary_dir.join("build");
 

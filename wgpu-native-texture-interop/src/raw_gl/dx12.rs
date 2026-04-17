@@ -11,22 +11,18 @@
 //! Use this path when the host wgpu device uses the D3D12 backend. For
 //! Vulkan on Windows, use [`super::windows::import_gl_framebuffer_vulkan_win32`].
 
+use dpi::PhysicalSize;
 use glow::HasContext;
 use std::ffi::c_void;
 use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::Graphics::Direct3D12::{
-    D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES, D3D12_HEAP_TYPE_DEFAULT,
-    D3D12_RESOURCE_DESC, D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-    D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
-    D3D12_RESOURCE_STATE_COMMON, D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12Resource,
+    D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_DESC,
+    D3D12_RESOURCE_DIMENSION_TEXTURE2D, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+    D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_RESOURCE_STATE_COMMON,
+    D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12Resource,
 };
-use windows::Win32::Graphics::Dxgi::{
-    DXGI_SHARED_RESOURCE_READ, DXGI_SHARED_RESOURCE_WRITE,
-};
-use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SAMPLE_DESC,
-};
-use dpi::PhysicalSize;
+use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SAMPLE_DESC};
+use windows::Win32::Graphics::Dxgi::{DXGI_SHARED_RESOURCE_READ, DXGI_SHARED_RESOURCE_WRITE};
 
 use crate::{HostWgpuContext, InteropError, gl_bindings as gl};
 
@@ -59,13 +55,13 @@ pub fn import_gl_framebuffer_dx12(
     use gl::Gles2 as Gl;
 
     unsafe {
-        let hal_device = host
-            .device
-            .as_hal::<wgpu::wgc::api::Dx12>()
-            .ok_or(InteropError::BackendMismatch {
-                expected: "Dx12",
-                actual: "non-Dx12",
-            })?;
+        let hal_device =
+            host.device
+                .as_hal::<wgpu::wgc::api::Dx12>()
+                .ok_or(InteropError::BackendMismatch {
+                    expected: "Dx12",
+                    actual: "non-Dx12",
+                })?;
         let d3d_device = hal_device.raw_device().clone();
 
         // Create a D3D12 texture that can be shared with GL via a DXGI NT handle.
@@ -221,27 +217,25 @@ pub fn import_gl_framebuffer_dx12(
             1, // sample_count
         );
 
-        let imported = host
-            .device
-            .create_texture_from_hal::<wgpu::wgc::api::Dx12>(
-                hal_texture,
-                &wgpu::TextureDescriptor {
-                    label: Some("gl-frame-dx12-import"),
-                    size: wgpu::Extent3d {
-                        width: size.width,
-                        height: size.height,
-                        depth_or_array_layers: 1,
-                    },
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    dimension: wgpu::TextureDimension::D2,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::COPY_SRC,
-                    view_formats: &[],
+        let imported = host.device.create_texture_from_hal::<wgpu::wgc::api::Dx12>(
+            hal_texture,
+            &wgpu::TextureDescriptor {
+                label: Some("gl-frame-dx12-import"),
+                size: wgpu::Extent3d {
+                    width: size.width,
+                    height: size.height,
+                    depth_or_array_layers: 1,
                 },
-            );
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                dimension: wgpu::TextureDimension::D2,
+                mip_level_count: 1,
+                sample_count: 1,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            },
+        );
 
         Ok(imported)
     }

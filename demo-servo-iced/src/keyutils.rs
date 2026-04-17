@@ -3,9 +3,7 @@
 // so the mapping is 1:1 for named keys and physical key codes.
 
 use iced::keyboard::{self, key};
-use servo::{
-    Code, Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey,
-};
+use servo::{Code, Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey};
 
 /// Build a Servo [`KeyboardEvent`] from an iced keyboard event.
 pub fn keyboard_event_from_iced(

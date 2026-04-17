@@ -17,9 +17,9 @@ pub mod surfman_gl;
 
 use std::rc::Rc;
 
+use dpi::PhysicalSize;
 pub use error::{InteropError, UnsupportedReason};
 pub use sync::{ImplicitOnlySynchronizer, InteropSynchronizer, NoopSynchronizer, SyncMechanism};
-use dpi::PhysicalSize;
 
 /// The wgpu graphics backend in use on the host device.
 ///
@@ -387,21 +387,18 @@ impl TextureImporter for WgpuTextureImporter {
         self.synchronizer
             .producer_complete(frame, frame.producer_sync())?;
 
-        let imported =
-            match frame {
-                NativeFrame::GlFramebufferSource(frame_source) => frame_source
+        let imported = match frame {
+            NativeFrame::GlFramebufferSource(frame_source) => {
+                frame_source
                     .importer
-                    .import_into(frame_source, &self.host, options),
-                NativeFrame::VulkanExternalImage(_) => Err(InteropError::Unsupported(
-                    UnsupportedReason::NativeImportNotYetImplemented,
-                )),
-                NativeFrame::MetalTextureRef(frame) => {
-                    import_metal_texture_ref(frame, &self.host)
-                }
-                NativeFrame::Dx12SharedTexture(frame) => {
-                    import_dx12_shared_texture(frame, &self.host)
-                }
-            }?;
+                    .import_into(frame_source, &self.host, options)
+            }
+            NativeFrame::VulkanExternalImage(_) => Err(InteropError::Unsupported(
+                UnsupportedReason::NativeImportNotYetImplemented,
+            )),
+            NativeFrame::MetalTextureRef(frame) => import_metal_texture_ref(frame, &self.host),
+            NativeFrame::Dx12SharedTexture(frame) => import_dx12_shared_texture(frame, &self.host),
+        }?;
 
         self.synchronizer
             .consumer_ready(&imported, imported.consumer_sync)?;
@@ -472,10 +469,8 @@ pub trait GlFramebufferSourceImpl {
 }
 
 fn import_metal_texture_ref(
-    #[cfg_attr(not(target_vendor = "apple"), allow(unused_variables))]
-    frame: &MetalTextureRef,
-    #[cfg_attr(not(target_vendor = "apple"), allow(unused_variables))]
-    host: &HostWgpuContext,
+    #[cfg_attr(not(target_vendor = "apple"), allow(unused_variables))] frame: &MetalTextureRef,
+    #[cfg_attr(not(target_vendor = "apple"), allow(unused_variables))] host: &HostWgpuContext,
 ) -> Result<ImportedTexture, InteropError> {
     #[cfg(target_vendor = "apple")]
     {
@@ -531,8 +526,7 @@ fn import_metal_texture_ref(
                         dimension: wgpu::TextureDimension::D2,
                         mip_level_count: 1,
                         sample_count: 1,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING
-                            | wgpu::TextureUsages::COPY_SRC,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
                         view_formats: &[],
                     },
                 )
@@ -555,10 +549,8 @@ fn import_metal_texture_ref(
 }
 
 fn import_dx12_shared_texture(
-    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
-    frame: &Dx12SharedTexture,
-    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
-    host: &HostWgpuContext,
+    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] frame: &Dx12SharedTexture,
+    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] host: &HostWgpuContext,
 ) -> Result<ImportedTexture, InteropError> {
     #[cfg(target_os = "windows")]
     {
@@ -570,13 +562,12 @@ fn import_dx12_shared_texture(
         }
 
         let texture = unsafe {
-            let hal_device = host
-                .device
-                .as_hal::<wgpu::wgc::api::Dx12>()
-                .ok_or(InteropError::BackendMismatch {
+            let hal_device = host.device.as_hal::<wgpu::wgc::api::Dx12>().ok_or(
+                InteropError::BackendMismatch {
                     expected: "Dx12",
                     actual: "non-Dx12",
-                })?;
+                },
+            )?;
 
             let d3d_device = hal_device.raw_device().clone();
             let mut resource: Option<windows::Win32::Graphics::Direct3D12::ID3D12Resource> = None;
@@ -602,25 +593,23 @@ fn import_dx12_shared_texture(
                 1, // sample_count
             );
 
-            host.device
-                .create_texture_from_hal::<wgpu::wgc::api::Dx12>(
-                    hal_texture,
-                    &wgpu::TextureDescriptor {
-                        label: Some("dx12-shared-texture-import"),
-                        size: wgpu::Extent3d {
-                            width: frame.size.width,
-                            height: frame.size.height,
-                            depth_or_array_layers: 1,
-                        },
-                        format: frame.format,
-                        dimension: wgpu::TextureDimension::D2,
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING
-                            | wgpu::TextureUsages::COPY_SRC,
-                        view_formats: &[],
+            host.device.create_texture_from_hal::<wgpu::wgc::api::Dx12>(
+                hal_texture,
+                &wgpu::TextureDescriptor {
+                    label: Some("dx12-shared-texture-import"),
+                    size: wgpu::Extent3d {
+                        width: frame.size.width,
+                        height: frame.size.height,
+                        depth_or_array_layers: 1,
                     },
-                )
+                    format: frame.format,
+                    dimension: wgpu::TextureDimension::D2,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                },
+            )
         };
 
         return Ok(ImportedTexture {

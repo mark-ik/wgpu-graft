@@ -1,7 +1,7 @@
 // Maps GPUI keyboard events to Servo's `keyboard_types`-based KeyboardEvent.
 
 use gpui::{KeyDownEvent, KeyUpEvent, Keystroke, Modifiers as GpuiModifiers};
-use servo::{Code, Key, KeyboardEvent, KeyState, Location, Modifiers, NamedKey};
+use servo::{Code, Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey};
 
 /// Build a Servo [`KeyboardEvent`] from a GPUI key-down event.
 pub fn keyboard_event_from_gpui_down(event: &KeyDownEvent) -> KeyboardEvent {

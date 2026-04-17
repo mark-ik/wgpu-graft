@@ -28,7 +28,7 @@ use std::time::Duration;
 
 use euclid::Scale;
 use iced::widget::{column, image, text, text_input};
-use iced::{event, keyboard, mouse, window, Element, Event, Length, Size, Subscription, Task};
+use iced::{Element, Event, Length, Size, Subscription, Task, event, keyboard, mouse, window};
 use rustls::crypto::aws_lc_rs;
 use servo::{
     DevicePoint, EventLoopWaker, InputEvent, KeyState, MouseButton as ServoMouseButton,
@@ -146,8 +146,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     let (w, h) = rgba.dimensions();
                     let handle = image::Handle::from_rgba(w, h, rgba.into_raw());
                     state.allocating = true;
-                    return iced::widget::image::allocate(handle)
-                        .map(Message::FrameAllocated);
+                    return iced::widget::image::allocate(handle).map(Message::FrameAllocated);
                 }
             }
         }
@@ -166,8 +165,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
 
         Message::Navigate => {
             let raw = &state.url_input;
-            let url = Url::parse(raw)
-                .or_else(|_| Url::parse(&format!("https://{raw}")));
+            let url = Url::parse(raw).or_else(|_| Url::parse(&format!("https://{raw}")));
             match url {
                 Ok(url) => state.webview.load(url),
                 Err(_) => eprintln!("invalid URL: {raw}"),
@@ -203,21 +201,27 @@ fn handle_event(state: &mut AppState, event: Event) {
 
             if state.cursor_in_viewport {
                 let pt = servo_point(position);
-                state.webview.notify_input_event(InputEvent::MouseMove(
-                    MouseMoveEvent::new(servo::WebViewPoint::Device(pt)),
-                ));
+                state
+                    .webview
+                    .notify_input_event(InputEvent::MouseMove(MouseMoveEvent::new(
+                        servo::WebViewPoint::Device(pt),
+                    )));
             } else if was_in {
-                state.webview.notify_input_event(InputEvent::MouseLeftViewport(
-                    MouseLeftViewportEvent::default(),
-                ));
+                state
+                    .webview
+                    .notify_input_event(InputEvent::MouseLeftViewport(
+                        MouseLeftViewportEvent::default(),
+                    ));
             }
         }
 
         Event::Mouse(mouse::Event::CursorLeft) => {
             if state.cursor_in_viewport {
-                state.webview.notify_input_event(InputEvent::MouseLeftViewport(
-                    MouseLeftViewportEvent::default(),
-                ));
+                state
+                    .webview
+                    .notify_input_event(InputEvent::MouseLeftViewport(
+                        MouseLeftViewportEvent::default(),
+                    ));
                 state.cursor_in_viewport = false;
             }
         }
@@ -226,26 +230,26 @@ fn handle_event(state: &mut AppState, event: Event) {
         Event::Mouse(mouse::Event::ButtonPressed(btn)) if state.cursor_in_viewport => {
             if let Some(servo_btn) = map_mouse_button(btn) {
                 let pt = servo_point(state.cursor_position);
-                state.webview.notify_input_event(InputEvent::MouseButton(
-                    MouseButtonEvent::new(
+                state
+                    .webview
+                    .notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
                         MouseButtonAction::Down,
                         servo_btn,
                         servo::WebViewPoint::Device(pt),
-                    ),
-                ));
+                    )));
             }
         }
 
         Event::Mouse(mouse::Event::ButtonReleased(btn)) if state.cursor_in_viewport => {
             if let Some(servo_btn) = map_mouse_button(btn) {
                 let pt = servo_point(state.cursor_position);
-                state.webview.notify_input_event(InputEvent::MouseButton(
-                    MouseButtonEvent::new(
+                state
+                    .webview
+                    .notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
                         MouseButtonAction::Up,
                         servo_btn,
                         servo::WebViewPoint::Device(pt),
-                    ),
-                ));
+                    )));
             }
         }
 
@@ -255,17 +259,20 @@ fn handle_event(state: &mut AppState, event: Event) {
                 mouse::ScrollDelta::Lines { x, y } => {
                     ((x as f64) * 38.0, (y as f64) * 38.0, WheelMode::DeltaLine)
                 }
-                mouse::ScrollDelta::Pixels { x, y } => {
-                    (x as f64, y as f64, WheelMode::DeltaPixel)
-                }
+                mouse::ScrollDelta::Pixels { x, y } => (x as f64, y as f64, WheelMode::DeltaPixel),
             };
             let pt = servo_point(state.cursor_position);
-            state.webview.notify_input_event(InputEvent::Wheel(
-                WheelEvent::new(
-                    WheelDelta { x: dx, y: dy, z: 0.0, mode },
+            state
+                .webview
+                .notify_input_event(InputEvent::Wheel(WheelEvent::new(
+                    WheelDelta {
+                        x: dx,
+                        y: dy,
+                        z: 0.0,
+                        mode,
+                    },
                     servo::WebViewPoint::Device(pt),
-                ),
-            ));
+                )));
         }
 
         // ── Keyboard ────────────────────────────────────────────────────
@@ -411,8 +418,7 @@ fn resolve_initial_url() -> Result<Url, String> {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("fixtures")
         .join("animated.html");
-    Url::from_file_path(&fixture)
-        .map_err(|_| format!("fixture not found: {}", fixture.display()))
+    Url::from_file_path(&fixture).map_err(|_| format!("fixture not found: {}", fixture.display()))
 }
 
 fn resolve_url_argument(argument: &str) -> Result<Url, String> {
@@ -430,8 +436,7 @@ fn resolve_url_argument(argument: &str) -> Result<Url, String> {
             .map_err(|e| e.to_string())?
             .join(candidate)
     };
-    Url::from_file_path(&absolute)
-        .map_err(|_| format!("not a valid URL or file path: {argument}"))
+    Url::from_file_path(&absolute).map_err(|_| format!("not a valid URL or file path: {argument}"))
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────

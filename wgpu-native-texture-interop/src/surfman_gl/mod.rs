@@ -99,7 +99,9 @@ impl GlFramebufferSourceImpl for SurfmanGlFrameSource {
             InteropBackend::Metal => metal::import_current_frame(self, _frame, host, _options),
 
             #[cfg(target_os = "windows")]
-            InteropBackend::Dx12 => windows::import_current_frame_dx12(self, _frame, host, _options),
+            InteropBackend::Dx12 => {
+                windows::import_current_frame_dx12(self, _frame, host, _options)
+            }
 
             #[cfg(not(target_os = "windows"))]
             InteropBackend::Dx12 => Err(InteropError::Unsupported(

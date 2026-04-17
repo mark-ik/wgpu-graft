@@ -39,9 +39,9 @@
 use std::ffi::c_void;
 
 use ash::vk;
+use dpi::PhysicalSize;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
-use dpi::PhysicalSize;
 
 use crate::{HostWgpuContext, InteropError};
 
@@ -72,12 +72,9 @@ type FnQuerySurfacePointerANGLE = unsafe extern "system" fn(
 /// reference count; no `FreeLibrary` is needed.
 unsafe fn get_egl_fn(name: &[u8]) -> Option<*const c_void> {
     // Safety: name must be a valid null-terminated ANSI string slice.
-    let module = unsafe {
-        GetModuleHandleA(windows::core::PCSTR(b"libEGL.dll\0".as_ptr())).ok()?
-    };
+    let module = unsafe { GetModuleHandleA(windows::core::PCSTR(b"libEGL.dll\0".as_ptr())).ok()? };
     unsafe {
-        GetProcAddress(module, windows::core::PCSTR(name.as_ptr()))
-            .map(|f| f as *const c_void)
+        GetProcAddress(module, windows::core::PCSTR(name.as_ptr())).map(|f| f as *const c_void)
     }
 }
 
@@ -128,8 +125,7 @@ unsafe fn import_kmt_texture(
     let mem_req = unsafe { raw_device.get_image_memory_requirements(vk_image) };
 
     // 3. Find a DEVICE_LOCAL memory type compatible with this image.
-    let mem_props =
-        unsafe { raw_instance.get_physical_device_memory_properties(raw_physical) };
+    let mem_props = unsafe { raw_instance.get_physical_device_memory_properties(raw_physical) };
 
     let mem_type_index = (0..mem_props.memory_type_count as usize)
         .find(|&i| {
@@ -160,11 +156,10 @@ unsafe fn import_kmt_texture(
         .map_err(|e| format!("vkAllocateMemory (KMT import) failed: {e:?}"))?;
 
     // 5. Bind image to the imported memory.
-    unsafe { raw_device.bind_image_memory(vk_image, memory, 0) }
-        .map_err(|e| {
-            unsafe { raw_device.free_memory(memory, None) };
-            format!("vkBindImageMemory failed: {e:?}")
-        })?;
+    unsafe { raw_device.bind_image_memory(vk_image, memory, 0) }.map_err(|e| {
+        unsafe { raw_device.free_memory(memory, None) };
+        format!("vkBindImageMemory failed: {e:?}")
+    })?;
 
     // 6. Wrap in a wgpu-hal Vulkan texture (wgpu-hal owns the VkDeviceMemory).
     Ok(unsafe {
@@ -247,11 +242,12 @@ pub fn import_angle_d3d11_frame(
         )
     })?;
 
-    let hal_device = unsafe { host.device.as_hal::<wgpu::wgc::api::Vulkan>() }
-        .ok_or(InteropError::BackendMismatch {
+    let hal_device = unsafe { host.device.as_hal::<wgpu::wgc::api::Vulkan>() }.ok_or(
+        InteropError::BackendMismatch {
             expected: "Vulkan",
             actual: "non-Vulkan (enable Backends::VULKAN)",
-        })?;
+        },
+    )?;
 
     // ANGLE surfaces use D3D11_RESOURCE_MISC_SHARED (legacy/KMT handle), not
     // SHARED_NTHANDLE. We must import with D3D11_TEXTURE_KMT handle type.

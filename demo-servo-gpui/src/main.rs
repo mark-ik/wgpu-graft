@@ -27,19 +27,18 @@ use std::sync::Arc;
 
 use euclid::Scale;
 use gpui::{
-    App, Application, Bounds, Context, FocusHandle, ImageSource, InteractiveElement,
-    IntoElement, KeyDownEvent, KeyUpEvent, MouseButton as GpuiMouseButton, MouseDownEvent,
-    MouseMoveEvent as GpuiMouseMoveEvent, MouseUpEvent, ObjectFit, ParentElement, Pixels,
-    Point, Render, RenderImage, ScrollDelta, ScrollWheelEvent, Styled, Window, WindowBounds,
+    App, Application, Bounds, Context, FocusHandle, ImageSource, InteractiveElement, IntoElement,
+    KeyDownEvent, KeyUpEvent, MouseButton as GpuiMouseButton, MouseDownEvent,
+    MouseMoveEvent as GpuiMouseMoveEvent, MouseUpEvent, ObjectFit, ParentElement, Pixels, Point,
+    Render, RenderImage, ScrollDelta, ScrollWheelEvent, Styled, Window, WindowBounds,
     WindowOptions, div, img, prelude::*, px, rgb, size,
 };
 use image::{Frame, ImageBuffer, Rgba};
 use rustls::crypto::aws_lc_rs;
 use servo::{
-    DevicePoint, EventLoopWaker, InputEvent,
-    MouseButton as ServoMouseButton, MouseButtonAction, MouseButtonEvent,
-    MouseLeftViewportEvent, MouseMoveEvent as ServoMouseMoveEvent, Servo, ServoBuilder,
-    WebView, WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
+    DevicePoint, EventLoopWaker, InputEvent, MouseButton as ServoMouseButton, MouseButtonAction,
+    MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent as ServoMouseMoveEvent, Servo,
+    ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
 };
 use servo_wgpu_interop_adapter::ServoWgpuRenderingContext;
 use smallvec::SmallVec;
@@ -137,25 +136,23 @@ impl ServoView {
     /// Forward a mouse-down event to Servo.
     fn servo_mouse_down(&mut self, button: ServoMouseButton, pos: Point<Pixels>) {
         let pt = self.servo_point(pos);
-        self.webview.notify_input_event(InputEvent::MouseButton(
-            MouseButtonEvent::new(
+        self.webview
+            .notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
                 MouseButtonAction::Down,
                 button,
                 servo::WebViewPoint::Device(pt),
-            ),
-        ));
+            )));
     }
 
     /// Forward a mouse-up event to Servo.
     fn servo_mouse_up(&mut self, button: ServoMouseButton, pos: Point<Pixels>) {
         let pt = self.servo_point(pos);
-        self.webview.notify_input_event(InputEvent::MouseButton(
-            MouseButtonEvent::new(
+        self.webview
+            .notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
                 MouseButtonAction::Up,
                 button,
                 servo::WebViewPoint::Device(pt),
-            ),
-        ));
+            )));
     }
 }
 
@@ -207,9 +204,17 @@ impl Render for ServoView {
                     .items_center()
                     .px_2()
                     .rounded_md()
-                    .bg(if url_focused { rgb(0x3a3a3a) } else { rgb(0x252525) })
+                    .bg(if url_focused {
+                        rgb(0x3a3a3a)
+                    } else {
+                        rgb(0x252525)
+                    })
                     .border_1()
-                    .border_color(if url_focused { rgb(0x5b9bd5) } else { rgb(0x444444) })
+                    .border_color(if url_focused {
+                        rgb(0x5b9bd5)
+                    } else {
+                        rgb(0x444444)
+                    })
                     .text_color(rgb(0xe0e0e0))
                     .text_sm()
                     .track_focus(&self.url_focus)
@@ -272,38 +277,49 @@ impl Render for ServoView {
                         view.servo_mouse_up(ServoMouseButton::Middle, event.position);
                     }),
                 )
-                .on_mouse_move(cx.listener(|view, event: &GpuiMouseMoveEvent, _window, _cx| {
-                    let pos = event.position;
-                    view.cursor_pos = pos;
-                    let was_in = view.cursor_in_viewport;
-                    view.cursor_in_viewport = f32::from(pos.y) >= NAV_BAR_HEIGHT;
+                .on_mouse_move(
+                    cx.listener(|view, event: &GpuiMouseMoveEvent, _window, _cx| {
+                        let pos = event.position;
+                        view.cursor_pos = pos;
+                        let was_in = view.cursor_in_viewport;
+                        view.cursor_in_viewport = f32::from(pos.y) >= NAV_BAR_HEIGHT;
 
-                    if view.cursor_in_viewport {
-                        let pt = view.servo_point(pos);
-                        view.webview.notify_input_event(InputEvent::MouseMove(
-                            ServoMouseMoveEvent::new(servo::WebViewPoint::Device(pt)),
-                        ));
-                    } else if was_in {
-                        view.webview.notify_input_event(InputEvent::MouseLeftViewport(
-                            MouseLeftViewportEvent::default(),
-                        ));
-                    }
-                }))
+                        if view.cursor_in_viewport {
+                            let pt = view.servo_point(pos);
+                            view.webview.notify_input_event(InputEvent::MouseMove(
+                                ServoMouseMoveEvent::new(servo::WebViewPoint::Device(pt)),
+                            ));
+                        } else if was_in {
+                            view.webview
+                                .notify_input_event(InputEvent::MouseLeftViewport(
+                                    MouseLeftViewportEvent::default(),
+                                ));
+                        }
+                    }),
+                )
                 .on_scroll_wheel(cx.listener(|view, event: &ScrollWheelEvent, _window, _cx| {
                     let pos = event.position;
                     let (dx, dy, mode) = match event.delta {
-                        ScrollDelta::Pixels(p) => {
-                            (f32::from(p.x) as f64, f32::from(p.y) as f64, WheelMode::DeltaPixel)
-                        }
+                        ScrollDelta::Pixels(p) => (
+                            f32::from(p.x) as f64,
+                            f32::from(p.y) as f64,
+                            WheelMode::DeltaPixel,
+                        ),
                         ScrollDelta::Lines(p) => {
                             (p.x as f64 * 38.0, p.y as f64 * 38.0, WheelMode::DeltaLine)
                         }
                     };
                     let pt = view.servo_point(pos);
-                    view.webview.notify_input_event(InputEvent::Wheel(WheelEvent::new(
-                        WheelDelta { x: dx, y: dy, z: 0.0, mode },
-                        servo::WebViewPoint::Device(pt),
-                    )));
+                    view.webview
+                        .notify_input_event(InputEvent::Wheel(WheelEvent::new(
+                            WheelDelta {
+                                x: dx,
+                                y: dy,
+                                z: 0.0,
+                                mode,
+                            },
+                            servo::WebViewPoint::Device(pt),
+                        )));
                 }))
                 .on_key_down(cx.listener(|view, event: &KeyDownEvent, _window, _cx| {
                     let kbd = keyutils::keyboard_event_from_gpui_down(event);
@@ -313,11 +329,7 @@ impl Render for ServoView {
                     let kbd = keyutils::keyboard_event_from_gpui_up(event);
                     view.webview.notify_input_event(InputEvent::Keyboard(kbd));
                 }))
-                .child(
-                    img(source)
-                        .size_full()
-                        .object_fit(ObjectFit::Fill),
-                )
+                .child(img(source).size_full().object_fit(ObjectFit::Fill))
                 .into_any()
         } else {
             div()
@@ -337,16 +349,19 @@ impl Render for ServoView {
             .flex()
             .flex_col()
             .bg(rgb(0x1e1e1e))
-            .on_mouse_move(cx.listener(|view, event: &GpuiMouseMoveEvent, _window, _cx| {
-                // Track cursor entering/leaving viewport area (for MouseLeftViewport)
-                let in_vp = f32::from(event.position.y) >= NAV_BAR_HEIGHT;
-                if !in_vp && view.cursor_in_viewport {
-                    view.webview.notify_input_event(InputEvent::MouseLeftViewport(
-                        MouseLeftViewportEvent::default(),
-                    ));
-                    view.cursor_in_viewport = false;
-                }
-            }))
+            .on_mouse_move(
+                cx.listener(|view, event: &GpuiMouseMoveEvent, _window, _cx| {
+                    // Track cursor entering/leaving viewport area (for MouseLeftViewport)
+                    let in_vp = f32::from(event.position.y) >= NAV_BAR_HEIGHT;
+                    if !in_vp && view.cursor_in_viewport {
+                        view.webview
+                            .notify_input_event(InputEvent::MouseLeftViewport(
+                                MouseLeftViewportEvent::default(),
+                            ));
+                        view.cursor_in_viewport = false;
+                    }
+                }),
+            )
             .child(url_bar)
             .child(viewport)
     }
@@ -426,8 +441,7 @@ fn resolve_initial_url() -> Result<Url, String> {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("fixtures")
         .join("animated.html");
-    Url::from_file_path(&fixture)
-        .map_err(|_| format!("fixture not found: {}", fixture.display()))
+    Url::from_file_path(&fixture).map_err(|_| format!("fixture not found: {}", fixture.display()))
 }
 
 fn resolve_url_argument(argument: &str) -> Result<Url, String> {
@@ -445,8 +459,7 @@ fn resolve_url_argument(argument: &str) -> Result<Url, String> {
             .map_err(|e| e.to_string())?
             .join(candidate)
     };
-    Url::from_file_path(&absolute)
-        .map_err(|_| format!("not a valid URL or file path: {argument}"))
+    Url::from_file_path(&absolute).map_err(|_| format!("not a valid URL or file path: {argument}"))
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -460,11 +473,7 @@ fn main() {
 
     Application::new().run(move |cx: &mut App| {
         let initial_url = initial_url.clone();
-        let bounds = Bounds::centered(
-            None,
-            size(px(DEFAULT_WIDTH), px(DEFAULT_HEIGHT)),
-            cx,
-        );
+        let bounds = Bounds::centered(None, size(px(DEFAULT_WIDTH), px(DEFAULT_HEIGHT)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),

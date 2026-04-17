@@ -5,12 +5,12 @@
 //! 2. Wrapping it as a wgpu HAL texture
 //! 3. Normalizing from BGRA8Unorm (Metal native) to RGBA8Unorm with Y-flip
 
+use dpi::PhysicalSize;
 use foreign_types_shared::ForeignType;
 use objc2::runtime::NSObject;
 use objc2::{msg_send, rc::Retained};
 use objc2_io_surface::IOSurfaceRef;
 use objc2_metal::{MTLPixelFormat, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage};
-use dpi::PhysicalSize;
 
 use crate::InteropError;
 
@@ -52,12 +52,12 @@ impl MetalImporter {
         size: PhysicalSize<u32>,
     ) -> Result<Retained<NSObject>, InteropError> {
         unsafe {
-            let metal_device = wgpu_device
-                .as_hal::<wgpu::wgc::api::Metal>()
-                .ok_or(InteropError::BackendMismatch {
+            let metal_device = wgpu_device.as_hal::<wgpu::wgc::api::Metal>().ok_or(
+                InteropError::BackendMismatch {
                     expected: "Metal",
                     actual: "non-Metal",
-                })?;
+                },
+            )?;
 
             let device_raw = metal_device.raw_device().clone();
 

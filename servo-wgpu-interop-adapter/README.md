@@ -16,7 +16,7 @@ The CPU readback demos ([xilem](../demo-servo-xilem/), [iced](../demo-servo-iced
 
 ## Feature flags
 
-- **`servo`** (optional) — enables the `libservo` dependency and Servo trait implementations. All Servo-embedding demos enable this feature.
+- **`servo`** (optional) — enables the published `servo` crate dependency and Servo trait implementations. All Servo-embedding demos enable this feature.
 
 Without `servo`, only the surfman-level types are available (useful for testing the adapter layer without pulling in all of Servo).
 
@@ -25,7 +25,7 @@ Without `servo`, only the surfman-level types are available (useful for testing 
 ```toml
 [dependencies]
 servo-wgpu-interop-adapter = { version = "0.1", features = ["servo"] }
-libservo = { git = "https://github.com/servo/servo", tag = "v0.0.6" }
+servo = "0.1.0"
 ```
 
 ```rust

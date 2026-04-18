@@ -8,7 +8,7 @@ description = "Demo embedding Servo in a Xilem UI via CPU texture readback"
 [dependencies]
 euclid = "0.22.11"
 image = "0.25"
-libservo = { git = "https://github.com/servo/servo", tag = "v0.0.6" }
+servo = "0.1.0"
 masonry = "0.4.0"
 masonry_winit = "0.4.0"
 rustls = "0.23.37"

@@ -1,0 +1,102 @@
+name: Experimental Servo Sync
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  AWS_LC_SYS_NO_ASM: "1"
+
+jobs:
+  sync-experimental:
+    name: Sync experimental with Servo upstream
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Switch to experimental
+        run: |
+          git fetch origin experimental
+          git checkout experimental
+          git reset --hard origin/experimental
+
+      - name: Resolve latest Servo upstream commit
+        id: servo
+        run: |
+          set -euo pipefail
+          git ls-remote https://github.com/servo/servo.git refs/heads/main > servo-head.txt
+          sha=$(cut -f1 servo-head.txt)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Rewrite Servo dependencies to upstream main
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          sha = "${{ steps.servo.outputs.sha }}"
+          replacement = f'servo = {{ git = "https://github.com/servo/servo", rev = "{sha}" }}'
+          files = [
+              Path("servo-wgpu-interop-adapter/Cargo.toml"),
+              Path("demo-servo-winit/Cargo.toml"),
+              Path("demo-servo-iced/Cargo.toml"),
+              Path("demo-servo-xilem/Cargo.toml"),
+              Path("demo-servo-gpui/Cargo.toml"),
+          ]
+
+          changed = False
+          for path in files:
+              text = path.read_text(encoding="utf-8")
+              updated = text.replace('servo = "0.1.0"', replacement)
+              updated = re.sub(
+                  r'servo = \{ git = "https://github\.com/servo/servo", rev = "[0-9a-f]{40}" \}',
+                  replacement,
+                  updated,
+              )
+              if updated != text:
+                  path.write_text(updated, encoding="utf-8")
+                  changed = True
+
+          if not changed:
+              print("Servo dependency declarations already matched the requested shape.")
+          PY
+
+      - name: Refresh lockfile
+        run: cargo update
+
+      - name: Validate adapter and reference demo
+        run: |
+          cargo check -p servo-wgpu-interop-adapter --features servo
+          cargo check -p demo-servo-winit
+
+      - name: Commit changes
+        run: |
+          if git diff --quiet; then
+            echo "No experimental sync changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock servo-wgpu-interop-adapter/Cargo.toml demo-servo-winit/Cargo.toml demo-servo-iced/Cargo.toml demo-servo-xilem/Cargo.toml demo-servo-gpui/Cargo.toml
+          git commit -m "experimental: sync Servo upstream to ${{ steps.servo.outputs.sha }}"
+
+      - name: Push experimental
+        run: |
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/experimental)" ]; then
+            echo "experimental is already up to date."
+            exit 0
+          fi
+          git push origin experimental

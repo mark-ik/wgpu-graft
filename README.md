@@ -1,6 +1,8 @@
-# wgpu-gui-bridge
+# wgpu-graft
 
 Rust workspace for embedding [Servo](https://servo.org) web content into host applications. It provides the low-level texture interop plumbing (GL/Vulkan/Metal/DX12 → wgpu) and a set of reference demos showing how to embed Servo in different GUI frameworks.
+
+The name comes from the surgical/horticultural sense: an external producer's GPU texture is *grafted* onto a host-owned `wgpu` texture, so the host can composite web content as just another textured surface.
 
 If you're looking to embed a web renderer in your Rust application, start with the demo closest to your stack and adapt from there. No promises! These are generated reference implementations to see what's possible, but the core interop crate is hopefully reusable and framework-agnostic.
 

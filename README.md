@@ -1,12 +1,10 @@
-# wgpu-gui-bridge
+# wgpu-graft
 
 Rust workspace for embedding [Servo](https://servo.org) web content into host applications. It provides the low-level texture interop plumbing (GL/Vulkan/Metal/DX12 → wgpu) and a set of reference demos showing how to embed Servo in different GUI frameworks.
 
 If you're looking to embed a web renderer in your Rust application, start with the demo closest to your stack and adapt from there. No promises! These are generated reference implementations to see what's possible, but the core interop crate is hopefully reusable and framework-agnostic.
 
 Also, to be clear and upfront, I used AI for pretty much all of it, adapting the Slint folks' Servo embedding example, and I think it turned out pretty well, considering. The demos are a bit rough but should be straightforward to understand and adapt. I wanted to see Servo in some more esoteric GUI frameworks, but I don't have Linux or Mac hardware to test those, so contributions are very welcome!
-
-NOTE: Though I have completed my goal for my webrender-wgpu fork and am now using and refining my lil wgpu backend in my servo-wgpu fork, please understand that this bridge will likely change to accomodate my principal use for it: the main blocker for servo-wgpu was that I'd have to do cpu readback for webgl content. But with this nifty bridge, servo can output entirely wgpu, with just the webgl content going through this bridge and rendering composited into wgpu texture. I believe this to be a pretty good idea because I am not porting webgl to wgpu, but annoyingly we keep mozangle and surfman for the GL context. 
 
 ## Crates
 

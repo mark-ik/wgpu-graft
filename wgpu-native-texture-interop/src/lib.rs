@@ -3,6 +3,16 @@
 mod error;
 mod sync;
 
+#[cfg(target_os = "windows")]
+mod sync_dx12;
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+mod sync_vulkan;
+#[cfg(target_vendor = "apple")]
+mod sync_metal;
+
+#[cfg(target_os = "linux")]
+mod vulkan_dmabuf;
+
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
 mod gl_bindings {
     #![allow(unsafe_op_in_unsafe_fn)]
@@ -20,6 +30,13 @@ use std::rc::Rc;
 use dpi::PhysicalSize;
 pub use error::{InteropError, UnsupportedReason};
 pub use sync::{ImplicitOnlySynchronizer, InteropSynchronizer, NoopSynchronizer, SyncMechanism};
+
+#[cfg(target_os = "windows")]
+pub use sync_dx12::Dx12FenceSynchronizer;
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+pub use sync_vulkan::VulkanSemaphoreSynchronizer;
+#[cfg(target_vendor = "apple")]
+pub use sync_metal::MetalSharedEventSynchronizer;
 
 /// The wgpu graphics backend in use on the host device.
 ///
@@ -62,11 +79,11 @@ pub enum TextureOrigin {
 pub enum NativeFrameKind {
     /// A GL framebuffer that will be imported via the platform-specific path.
     GlFramebufferSource,
-    /// A Vulkan external image. Import not yet implemented.
+    /// A Vulkan external image (Linux DMABUF import).
     VulkanExternalImage,
-    /// A Metal texture reference. Import not yet implemented.
+    /// A Metal texture reference (macOS/iOS).
     MetalTextureRef,
-    /// A D3D12 shared texture. Import not yet implemented.
+    /// A D3D12 shared texture (Windows).
     Dx12SharedTexture,
 }
 
@@ -90,11 +107,11 @@ pub struct CapabilityMatrix {
     pub host_backend: InteropBackend,
     /// GL framebuffer import (the primary path — Linux Vulkan, Apple Metal).
     pub gl_framebuffer_source: CapabilityStatus,
-    /// Direct Vulkan external image import. Not yet implemented.
+    /// Direct DMABUF→Vulkan import (Linux only).
     pub vulkan_external_image: CapabilityStatus,
-    /// Direct Metal texture reference import. Not yet implemented.
+    /// Direct Metal texture reference import (Apple platforms only).
     pub metal_texture_ref: CapabilityStatus,
-    /// D3D12 shared texture import. Not yet implemented.
+    /// D3D12 shared texture import (Windows only).
     pub dx12_shared_texture: CapabilityStatus,
 }
 
@@ -219,13 +236,40 @@ impl GlFramebufferSource {
     }
 }
 
-/// Metadata for a Vulkan external image frame. **Import not yet implemented.**
+/// A frame backed by a Linux DMABUF imported via Vulkan
+/// `VK_KHR_external_memory_fd` + `VK_EXT_image_drm_format_modifier`.
+///
+/// The producer (e.g. WPE) hands the consumer a DMABUF fd, DRM format
+/// modifier, and per-plane offset/stride; the importer wraps it as a
+/// `wgpu::Texture` on the host's wgpu Vulkan device. Single-plane RGBA is
+/// the common case; multi-plane formats are not yet supported.
+///
+/// The `dmabuf_fd` and `wait_semaphore_fd` are **consumed** by the importer
+/// — Vulkan's `vkImportMemoryFdKHR` and `vkImportSemaphoreFdKHR` take
+/// ownership of the descriptors and the driver closes them. The producer
+/// must not close its copy after handoff.
 #[derive(Clone, Copy, Debug)]
 pub struct VulkanExternalImage {
     pub size: PhysicalSize<u32>,
     pub format: wgpu::TextureFormat,
     pub generation: u64,
     pub producer_sync: SyncMechanism,
+    /// DMABUF file descriptor of the producer's allocated image. Linux only.
+    pub dmabuf_fd: i32,
+    /// Offset in bytes into the dmabuf where the image data starts. `0` for
+    /// most allocators.
+    pub dmabuf_offset: u64,
+    /// Row stride in bytes. The producer's allocator reports this (often
+    /// `width * bytes_per_pixel` rounded up to alignment).
+    pub dmabuf_stride: u64,
+    /// DRM format modifier reported by the producer. `0`
+    /// (`DRM_FORMAT_MOD_LINEAR`) for linear-tiled buffers.
+    pub drm_modifier: u64,
+    /// Optional fd to a `VkSemaphore` payload (`OPAQUE_FD`) the producer
+    /// signals after rendering. Pair with
+    /// [`VulkanSemaphoreSynchronizer`](crate::VulkanSemaphoreSynchronizer)
+    /// to gate consumer submits on the signal.
+    pub wait_semaphore_fd: Option<i32>,
 }
 
 /// A frame backed by a `MTLTexture` from a Metal producer.
@@ -259,6 +303,16 @@ pub struct Dx12SharedTexture {
     pub format: wgpu::TextureFormat,
     pub generation: u64,
     pub producer_sync: SyncMechanism,
+    /// Fence value the producer signalled at on its `ID3D11Fence` /
+    /// `ID3D12Fence` (opened from
+    /// [`Dx12FenceSynchronizer::shared_handle`](crate::Dx12FenceSynchronizer::shared_handle)).
+    /// The synchronizer waits for this value on the wgpu D3D12 queue
+    /// before the next consumer submit.
+    ///
+    /// Only meaningful when `producer_sync == SyncMechanism::ExplicitFence`.
+    /// Set to `0` for the keyed-mutex / no-fence path; the synchronizer
+    /// treats `0` as "no wait recorded for this frame".
+    pub fence_value: u64,
     /// NT `HANDLE` from `IDXGIResource1::CreateSharedHandle`. Windows only.
     ///
     /// The importer opens its own reference via `OpenSharedHandle`. Close
@@ -274,19 +328,19 @@ pub struct Dx12SharedTexture {
 /// A frame produced by a [`FrameProducer`], ready to be imported by a
 /// [`TextureImporter`].
 ///
-/// `GlFramebufferSource`, `MetalTextureRef`, and `Dx12SharedTexture` have
-/// complete import implementations. `VulkanExternalImage` is defined for API
-/// stability but its import path is not yet implemented.
+/// All four variants have working import implementations.
+/// `VulkanExternalImage` is Linux-only; the others are gated on their
+/// respective platforms.
 #[non_exhaustive]
 pub enum NativeFrame {
     /// A GL framebuffer — the primary, fully-implemented path.
     GlFramebufferSource(GlFramebufferSource),
-    /// A Vulkan external image. Not yet implemented — returns
-    /// [`UnsupportedReason::NativeImportNotYetImplemented`].
+    /// A Linux DMABUF imported via Vulkan
+    /// `VK_KHR_external_memory_fd` + `VK_EXT_image_drm_format_modifier`.
     VulkanExternalImage(VulkanExternalImage),
-    /// A Metal texture reference. Fully implemented via IOSurface interop.
+    /// A Metal texture reference. Implemented via IOSurface interop.
     MetalTextureRef(MetalTextureRef),
-    /// A D3D12 shared texture. Fully implemented via shared handle interop.
+    /// A D3D12 shared texture. Implemented via shared NT handle interop.
     Dx12SharedTexture(Dx12SharedTexture),
 }
 
@@ -393,9 +447,7 @@ impl TextureImporter for WgpuTextureImporter {
                     .importer
                     .import_into(frame_source, &self.host, options)
             }
-            NativeFrame::VulkanExternalImage(_) => Err(InteropError::Unsupported(
-                UnsupportedReason::NativeImportNotYetImplemented,
-            )),
+            NativeFrame::VulkanExternalImage(frame) => import_vulkan_external_image(frame, &self.host),
             NativeFrame::MetalTextureRef(frame) => import_metal_texture_ref(frame, &self.host),
             NativeFrame::Dx12SharedTexture(frame) => import_dx12_shared_texture(frame, &self.host),
         }?;
@@ -419,7 +471,16 @@ impl CapabilityMatrix {
 
         let vulkan_external_image = match host_backend {
             InteropBackend::Vulkan => {
-                CapabilityStatus::Unsupported(UnsupportedReason::NativeImportNotYetImplemented)
+                #[cfg(target_os = "linux")]
+                {
+                    CapabilityStatus::Supported
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    // The wgpu Vulkan backend works on Linux/Android/Windows,
+                    // but DMABUF imports are Linux-specific.
+                    CapabilityStatus::Unsupported(UnsupportedReason::PlatformNotImplemented)
+                }
             }
             InteropBackend::Metal | InteropBackend::Dx12 => {
                 CapabilityStatus::Unsupported(UnsupportedReason::HostBackendMismatch)
@@ -466,6 +527,29 @@ pub trait GlFramebufferSourceImpl {
         host: &HostWgpuContext,
         options: &ImportOptions,
     ) -> Result<ImportedTexture, InteropError>;
+}
+
+fn import_vulkan_external_image(
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] frame: &VulkanExternalImage,
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] host: &HostWgpuContext,
+) -> Result<ImportedTexture, InteropError> {
+    #[cfg(target_os = "linux")]
+    {
+        let texture = vulkan_dmabuf::import_vulkan_external_image(frame, host)?;
+        return Ok(ImportedTexture {
+            texture,
+            format: frame.format,
+            size: frame.size,
+            origin: TextureOrigin::TopLeft,
+            generation: frame.generation,
+            consumer_sync: frame.producer_sync,
+        });
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    Err(InteropError::Unsupported(
+        UnsupportedReason::NativeImportNotYetImplemented,
+    ))
 }
 
 fn import_metal_texture_ref(
@@ -679,9 +763,12 @@ mod tests {
             CapabilityStatus::Unsupported(UnsupportedReason::HostBackendUnavailable)
         );
 
+        #[cfg(target_os = "linux")]
+        assert_eq!(vulkan.vulkan_external_image, CapabilityStatus::Supported);
+        #[cfg(not(target_os = "linux"))]
         assert_eq!(
             vulkan.vulkan_external_image,
-            CapabilityStatus::Unsupported(UnsupportedReason::NativeImportNotYetImplemented)
+            CapabilityStatus::Unsupported(UnsupportedReason::PlatformNotImplemented)
         );
         assert_eq!(
             metal.vulkan_external_image,

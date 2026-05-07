@@ -4,6 +4,41 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Added — `wgpu-native-texture-interop` 0.2.0
+
+- `Dx12FenceSynchronizer`: explicit `D3D12_FENCE_FLAG_SHARED` fence
+  synchronizer for cross-API texture handoff. Creates a shared fence on
+  the wgpu D3D12 device, exports an NT handle for D3D11/D3D12 producers,
+  and queues `ID3D12CommandQueue::Wait` on the wgpu queue before each
+  consumer submit
+- `VulkanSemaphoreSynchronizer`: external `VkSemaphore` fd-based
+  synchronizer for the WPE DMABUF protocol on Linux. Imports a per-frame
+  semaphore fd into a persistent `VkSemaphore` with `TEMPORARY` flag and
+  issues a standalone wait submit on the wgpu Vulkan queue
+- `MetalSharedEventSynchronizer`: precautionary `MTLSharedEvent`
+  synchronizer for Apple platforms; CPU-side wait via
+  `waitUntilSignaledValue:timeoutMS:`. Not required for correctness on
+  Apple silicon (IOSurface coherence is implicit) but provides the API
+  anchor for a future GPU-side wait once `wgpu-hal::metal::Queue`
+  exposes its raw `MTLCommandQueue`
+- `VulkanExternalImage` import path: DMABUF→`VkImage`→`wgpu::Texture` via
+  `VK_KHR_external_memory_fd` + `VK_EXT_image_drm_format_modifier`
+  (Linux only). Replaces the prior
+  `Unsupported(NativeImportNotYetImplemented)` arm with a real import
+  for WPE-class DMABUF producers
+- `VulkanExternalImage` fields for DMABUF and semaphore handoff:
+  `dmabuf_fd`, `dmabuf_offset`, `dmabuf_stride`, `drm_modifier`,
+  `wait_semaphore_fd`
+
+### Changed — `wgpu-native-texture-interop` 0.2.0
+
+- `CapabilityMatrix::vulkan_external_image`: now reports `Supported`
+  on Linux + Vulkan host backend (was
+  `Unsupported(NativeImportNotYetImplemented)`)
+- Cargo features: added `Win32_Security` to the `windows` crate dep
+  (required by `ID3D12Device::CreateSharedHandle`); added `MTLEvent` to
+  `objc2-metal` (required by `newSharedEvent`)
+
 ### Added
 
 - `README.md`: documented the branch policy for `main`, `latest-release`,

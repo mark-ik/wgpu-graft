@@ -1,6 +1,6 @@
 [package]
 name = "wgpu-native-texture-interop"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/mark-ik/wgpu-graft"
@@ -30,6 +30,7 @@ windows = { version = "0.62", features = [
     "Win32_Graphics_Direct3D12",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
+    "Win32_Security",
     "Win32_System_LibraryLoader",
 ] }
 
@@ -39,7 +40,7 @@ metal = "0.33.0"
 objc2 = "0.6.3"
 objc2-foundation = "0.3.2"
 objc2-io-surface = "0.3.2"
-objc2-metal = { version = "0.3.2", features = ["MTLDevice", "MTLAllocation", "MTLResource", "MTLTexture", "objc2-io-surface"] }
+objc2-metal = { version = "0.3.2", features = ["MTLDevice", "MTLAllocation", "MTLResource", "MTLTexture", "MTLEvent", "objc2-io-surface"] }
 
 [build-dependencies]
 gl_generator = "0.14.0"

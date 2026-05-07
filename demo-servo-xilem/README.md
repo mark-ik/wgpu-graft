@@ -28,4 +28,4 @@ Xilem uses the masonry layout engine and winit for windowing. Servo events are d
 
 ## License
 
-MIT OR Apache-2.0
+[MPL-2.0](../LICENSE)

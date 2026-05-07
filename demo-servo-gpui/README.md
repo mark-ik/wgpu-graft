@@ -32,4 +32,4 @@ cargo run -p demo-servo-gpui -- servo.org            # auto-prefixes https://
 
 ## License
 
-MIT OR Apache-2.0
+[MPL-2.0](../LICENSE)

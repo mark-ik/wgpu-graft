@@ -2,7 +2,7 @@
 name = "demo-servo-iced"
 version = "0.1.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 description = "Demo embedding Servo in an iced UI with URL bar and input forwarding"
 
 [dependencies]

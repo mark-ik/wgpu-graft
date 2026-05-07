@@ -49,4 +49,4 @@ wgpu-native-texture-interop = { version = "0.1", default-features = false }
 
 ## License
 
-MIT OR Apache-2.0
+[MPL-2.0](../LICENSE)

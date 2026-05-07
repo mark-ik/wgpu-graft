@@ -29,4 +29,4 @@ cargo run -p demo-servo-iced -- servo.org            # auto-prefixes https://
 
 ## License
 
-MIT OR Apache-2.0
+[MPL-2.0](../LICENSE)

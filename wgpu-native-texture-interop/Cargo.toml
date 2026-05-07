@@ -2,7 +2,7 @@
 name = "wgpu-native-texture-interop"
 version = "0.1.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 repository = "https://github.com/mark-ik/wgpu-graft"
 description = "Native texture interop helpers for importing offscreen producer frames into host-owned wgpu textures"
 

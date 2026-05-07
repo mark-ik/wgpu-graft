@@ -111,4 +111,4 @@ These patches are only needed by `demo-servo-gpui`. The other demos and the core
 
 ## License
 
-MIT OR Apache-2.0
+[MPL-2.0](LICENSE)

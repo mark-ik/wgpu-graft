@@ -2,7 +2,7 @@
 name = "demo-servo-gpui"
 version = "0.1.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 description = "Demo embedding Servo in a GPUI application with URL bar and input forwarding"
 
 [dependencies]

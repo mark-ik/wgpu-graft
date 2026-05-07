@@ -1,6 +1,6 @@
 [package]
 name = "wgpu-native-texture-interop"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/mark-ik/wgpu-graft"

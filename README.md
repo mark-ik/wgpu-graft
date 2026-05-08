@@ -6,8 +6,6 @@ If you're looking to embed a web renderer in your Rust application, start with t
 
 To be clear and upfront: I used AI for pretty much all of it, adapting the Slint folks' Servo embedding example, and I think it turned out pretty well, considering I really just wanted to see Servo in some more esoteric GUI frameworks. I don't have Linux or Mac hardware to test those, so contributions are very welcome, but I would direct them to the Slint repo linked above first and foremost!
 
-The core crate this depends upon, [`scrying`](https://github.com/mark-ik/scrying), has been abstracted from Servo to become renderer agnostic, and I am now using it to attempt a similar thing with system webviews.
-
 ## Crates
 
 | Crate | Purpose |

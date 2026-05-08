@@ -64,14 +64,17 @@ pub(super) fn import_current_frame(
         host,
     );
 
-    let _ = device
+    let rebind = device
         .bind_surface_to_context(&mut context, surface)
         .map_err(|(err, mut surface)| {
             let _ = device.destroy_surface(&mut context, &mut surface);
-            err
+            InteropError::Surfman(format!("rebind after import failed: {err:?}"))
         });
 
-    result.map(|texture| ImportedTexture {
+    let texture = result?;
+    rebind?;
+
+    Ok(ImportedTexture {
         texture,
         format: wgpu::TextureFormat::Rgba8Unorm,
         size: frame.size(),
@@ -159,14 +162,17 @@ pub(super) fn import_current_frame_dx12(
         host,
     );
 
-    let _ = device
+    let rebind = device
         .bind_surface_to_context(&mut context, surface)
         .map_err(|(err, mut surface)| {
             let _ = device.destroy_surface(&mut context, &mut surface);
-            err
+            InteropError::Surfman(format!("rebind after import failed: {err:?}"))
         });
 
-    result.map(|texture| ImportedTexture {
+    let texture = result?;
+    rebind?;
+
+    Ok(ImportedTexture {
         texture,
         format: wgpu::TextureFormat::Rgba8Unorm,
         size: frame.size(),

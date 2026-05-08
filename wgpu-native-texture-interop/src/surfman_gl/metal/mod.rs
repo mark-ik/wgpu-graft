@@ -23,19 +23,17 @@ pub(super) fn import_current_frame(
     let io_surface = &native_surface.0;
 
     let importer = crate::raw_gl::metal::MetalImporter::new(&host.device);
-    let texture = importer
-        .import(io_surface, source.size, &host.device, &host.queue)
-        .map_err(|err| match err {
-            InteropError::Metal(msg) => InteropError::Metal(msg),
-            other => other,
-        })?;
+    let result = importer.import(io_surface, source.size, &host.device, &host.queue);
 
-    let _ = device
+    let rebind = device
         .bind_surface_to_context(&mut context, surface)
         .map_err(|(err, mut surface)| {
             let _ = device.destroy_surface(&mut context, &mut surface);
-            err
+            InteropError::Surfman(format!("rebind after import failed: {err:?}"))
         });
+
+    let texture = result?;
+    rebind?;
 
     Ok(ImportedTexture {
         texture,

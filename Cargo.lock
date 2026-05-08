@@ -12844,6 +12844,7 @@ dependencies = [
  "wgpu 29.0.1",
  "wgpu-hal 29.0.1",
  "windows 0.62.2",
+ "wio",
 ]
 
 [[package]]

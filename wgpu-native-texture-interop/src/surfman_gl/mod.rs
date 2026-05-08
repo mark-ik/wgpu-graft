@@ -9,6 +9,9 @@ mod metal;
 #[cfg(target_os = "windows")]
 mod windows;
 
+#[cfg(target_os = "windows")]
+mod windows_dx12_shared;
+
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -26,6 +29,8 @@ pub struct SurfmanFrameProducer {
     context: Rc<SurfmanFrameContext>,
     size: Rc<Cell<PhysicalSize<u32>>>,
     generation: Cell<u64>,
+    #[cfg(target_os = "windows")]
+    angle_dx12_shared: Rc<windows_dx12_shared::AngleDx12SharedCache>,
 }
 
 #[cfg_attr(target_os = "windows", allow(dead_code))]
@@ -33,6 +38,8 @@ struct SurfmanGlFrameSource {
     context: Rc<SurfmanFrameContext>,
     size: PhysicalSize<u32>,
     generation: u64,
+    #[cfg(target_os = "windows")]
+    angle_dx12_shared: Rc<windows_dx12_shared::AngleDx12SharedCache>,
 }
 
 impl SurfmanFrameProducer {
@@ -41,6 +48,8 @@ impl SurfmanFrameProducer {
             context,
             size: Rc::new(Cell::new(initial_size)),
             generation: Cell::new(0),
+            #[cfg(target_os = "windows")]
+            angle_dx12_shared: Rc::new(windows_dx12_shared::AngleDx12SharedCache::new()),
         }
     }
 
@@ -76,6 +85,8 @@ impl FrameProducer for SurfmanFrameProducer {
                 context: self.context.clone(),
                 size: self.size.get(),
                 generation: next_generation,
+                #[cfg(target_os = "windows")]
+                angle_dx12_shared: self.angle_dx12_shared.clone(),
             }),
         )))
     }

@@ -81,9 +81,18 @@ pub(super) fn import_current_frame(
     })
 }
 
-/// Import the current surfman frame into a `wgpu::Texture` via a D3D12 shared texture.
+/// Import the current surfman frame into a `wgpu::Texture` on a DX12 host.
 ///
-/// Use this when the host wgpu device uses the D3D12 backend.
+/// Tries paths in order:
+///
+/// 1. **ANGLE D3D11 → DX12 shared texture** ([`super::windows_dx12_shared`])
+///    — works against Servo's default ANGLE-D3D11 surfman backend by
+///    allocating the shared texture on ANGLE's own D3D11 device and wrapping
+///    it as a transient EGL pbuffer. Fast path.
+/// 2. **`GL_EXT_memory_object_win32`** ([`crate::raw_gl::dx12`]) — exports a
+///    DX12 resource into GL via external-memory extensions. ANGLE does not
+///    expose these extensions, so this path only succeeds against non-ANGLE
+///    Vulkan-backed surfman GL contexts.
 pub(super) fn import_current_frame_dx12(
     source: &SurfmanGlFrameSource,
     frame: &GlFramebufferSource,
@@ -93,6 +102,40 @@ pub(super) fn import_current_frame_dx12(
     let device = &source.context.device.borrow();
     let mut context = source.context.context.borrow_mut();
 
+    // Make the context current so EGL queries (and the ANGLE D3D11-shared path)
+    // see the right surface.
+    device
+        .make_context_current(&mut context)
+        .map_err(|err| InteropError::Surfman(format!("{err:?}")))?;
+
+    // ── Fast path: ANGLE D3D11 shared NT-handle → wgpu DX12 ──────────────────
+    let bound_fbo = surface_fbo(device, &context);
+    match super::windows_dx12_shared::import_current_frame(
+        &source.angle_dx12_shared,
+        device,
+        &mut context,
+        &source.context.glow_gl,
+        bound_fbo,
+        source.size,
+        host,
+    ) {
+        Ok(texture) => {
+            return Ok(ImportedTexture {
+                texture,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                size: frame.size(),
+                origin: TextureOrigin::TopLeft,
+                generation: source.generation,
+                consumer_sync: SyncMechanism::ImplicitGlFlush,
+            });
+        }
+        Err(_) => {
+            // Not an ANGLE D3D11 surfman context, or DX12 device unavailable;
+            // try the GL_EXT_memory_object_win32 path against an unbound surface.
+        }
+    }
+
+    // ── Slow path: GL_EXT_memory_object_win32 (non-ANGLE Vulkan GL) ──────────
     let surface = device
         .unbind_surface_from_context(&mut context)
         .map_err(|err| InteropError::Surfman(format!("{err:?}")))?
@@ -131,4 +174,17 @@ pub(super) fn import_current_frame_dx12(
         generation: source.generation,
         consumer_sync: SyncMechanism::ImplicitGlFlush,
     })
+}
+
+/// Read the current surfman surface's GL framebuffer object id without
+/// unbinding the surface. Returns `0` (the default framebuffer) if no
+/// surface-backed framebuffer is reported.
+fn surface_fbo(device: &surfman::Device, context: &surfman::Context) -> u32 {
+    device
+        .context_surface_info(context)
+        .ok()
+        .flatten()
+        .and_then(|info| info.framebuffer_object)
+        .map(|fb| fb.0.get())
+        .unwrap_or(0)
 }

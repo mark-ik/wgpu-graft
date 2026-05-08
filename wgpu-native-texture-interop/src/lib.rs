@@ -49,8 +49,9 @@ pub enum InteropBackend {
     Vulkan,
     /// Metal backend (macOS, iOS).
     Metal,
-    /// Direct3D 12 backend (Windows default). GL→DX12 import is not yet
-    /// implemented; use `wgpu::Backends::VULKAN` on Windows for GL interop.
+    /// Direct3D 12 backend (Windows). GL→DX12 import is supported on
+    /// ANGLE-backed surfman via the shared D3D11 NT-handle path
+    /// (`surfman_gl::windows_dx12_shared`).
     Dx12,
     /// Backend could not be detected. All import paths will report
     /// [`CapabilityStatus::Unsupported`].

@@ -29,16 +29,17 @@ User-approved scope: **P1–P3 only**.
 
 ## Per-branch state, before any work
 
-```
+Branch line-up was simplified to three: `main`, `latest-release`, `experimental`.
+
+```text
 main                          canonical; wgpu 29; servo 0.1.0; webview2 fence sync; MPL-2.0
 latest-release                stale; pre-MPL relicense; missing v0.1.1 bump and recent work
 experimental                  stale; same shape as latest-release; predates 018eaab branch-line setup
-servo-0.0.6-wgpu-28           wgpu 28 + servo 0.0.6 line; one branch-doc commit ahead of fork
-servo-webgl-interop           5 commits ahead of main with surfman-import probe work
-wry-webview2-texture-spike    15 commits ahead; out-of-scope for slint sync
 ```
 
 The fact that `experimental` and `latest-release` are *missing* recent main commits means they're not real branch lines yet — they're stale snapshots. They were created 2026-04-08 with intent to be CI-synced (`018eaab Establish Servo branch lines and nightly experimental sync`), but no sync has actually propagated. Those branches should be hard-reset to a known main baseline as part of this pass.
+
+Three sibling branches that existed before this pass were retired (deleted on remote and locally): `servo-0.0.6-wgpu-28` (Servo 0.0.6 + wgpu 28 maintenance line), `servo-webgl-interop` (custom WebGL interop work), `wry-webview2-texture-spike` (WebView2 / D3D11 shared-handle exploration).
 
 ## Work breakdown
 
@@ -113,14 +114,13 @@ This is correctness/quality, not a feature add. No CapabilityMatrix change.
 
 ### Phase 4 — propagate to sibling branches
 
+Scope simplified mid-pass: only `main`, `latest-release`, and `experimental` are kept. `servo-0.0.6-wgpu-28`, `servo-webgl-interop`, and `wry-webview2-texture-spike` were retired (deleted on remote and locally) — see "Per-branch state" above.
+
 In dependency order:
 
 1. **`main`** — receives Phase 1–3.
 2. **`latest-release`** — currently stale snapshot from 2026-04-08. Hard-reset to `main` once main is green; this branch only diverges when a non-LTS Servo release ships *and* we choose to track it. There isn't one today.
 3. **`experimental`** — same situation; hard-reset to `main`. The "experimental tracks Servo head" intent only matters once we wire the CI sync workflow to actually run; that's separate work, not in this pass.
-4. **`servo-0.0.6-wgpu-28`** — wgpu 28 + servo 0.0.6 line. Cherry-pick Phase 1's directx port directly (slint's source is wgpu-28-shaped, so this branch is *easier* than main — fewer wgpu API adjustments). Skip Phase 2 (adapter selection helper depends on wgpu 29 typed API ergonomics) unless the helper is trivially backportable. Skip Phase 3 (Metal) — out of scope for a Windows-focused compat branch.
-5. **`servo-webgl-interop`** — 5 commits ahead with surfman-import probes. Merge `main` forward; resolve any conflicts in `wgpu-native-texture-interop/src/lib.rs` (this branch touches the import-helper signatures).
-6. **`wry-webview2-texture-spike`** — out of scope. Document in CHANGELOG that wry-line is decoupled from slint upstream.
 
 For each branch: green `cargo check`, push, observe CI.
 
@@ -157,23 +157,17 @@ Bump `wgpu-native-texture-interop/Cargo.toml` from `0.2.0` to a release-ready `0
 | `demo-servo-winit https://servo.org` with `WGPU_BACKEND=dx12` | windows | end of Phase 1 |
 | `demo-servo-winit` on dual-GPU host | windows + multi-GPU | end of Phase 2 |
 | `demo-servo-winit https://servo.org` with no env override | macOS | end of Phase 3 |
-| Per-branch `cargo check` after merge/reset | all 5 sync targets | end of Phase 4 |
+| Per-branch `cargo check` after merge/reset | main + latest-release + experimental | end of Phase 4 |
 | `cargo publish --dry-run` (no publish) | both crates | end of Phase 5 |
 
 ## Risks / open questions
 
-1. **wgpu-hal DX12 API stability between 28 and 29.** `texture_from_raw` and `create_texture_from_hal::<Dx12>` need a quick verify against the wgpu 29 docs; if the signature changed, Phase 1 needs a small adjustment.
-2. **EGL pbuffer wrapper lifetime in the new path.** Slint's directx.rs creates the surface texture *each frame*. wgpu-graft has historically cached size-dependent state. Decide: cache or per-frame? Slint upstream caches via `D3D11SizeDependentState`; we'll match that to keep semantics aligned.
-3. **`servo-0.0.6-wgpu-28` is dormant.** If it hasn't been touched in months, a `cargo check` may be needed first to confirm it still builds on its old toolchain before porting anything onto it.
-4. **CI workflow `experimental-servo-sync.yml`** exists but doesn't appear to have run successfully. Out of scope for this plan, but flag for follow-up — if `experimental` is supposed to track Servo HEAD nightly, the workflow needs auditing separately.
-
-## Branches not propagated
-
-- `wry-webview2-texture-spike` — independent line.
+1. **wgpu-hal DX12 API stability between 28 and 29.** `texture_from_raw` and `create_texture_from_hal::<Dx12>` were verified against the wgpu 29 docs during Phase 1 — same shape as slint's wgpu 28 source.
+2. **EGL pbuffer wrapper lifetime in the new path.** Slint's directx.rs creates the surface texture *each frame*. wgpu-graft now caches the size-dependent state via `AngleDx12SharedCache` on `SurfmanFrameProducer`, matching slint's `D3D11SizeDependentState` semantics.
+3. **CI workflow `experimental-servo-sync.yml`** exists but doesn't appear to have run successfully. Out of scope for this plan, but flag for follow-up — if `experimental` is supposed to track Servo HEAD nightly, the workflow needs auditing separately.
 
 ## Out of scope (explicit)
 
 - Slint mobile UI changes (`4b46b98`).
 - The "let slint create the wgpu instance" architectural change (`9645f48`) — wgpu-graft's split between core interop crate and demos already places the wgpu-instance ownership in the demo, which is a different shape than slint's.
 - Any `cargo publish` actions.
-- Any branch deletions or destructive operations on existing branches.

@@ -65,7 +65,6 @@ pick a branch without digging through commit history.
 | `main` | Recommended default for embedders | current Servo LTS release line |
 | `latest-release` | Tracks the newest non-LTS Servo release once one exists beyond the current LTS line | newest post-LTS release line |
 | `experimental` | Integration work against upstream Servo head | upstream `main` |
-| `servo-wgpu` | Fork-specific work for the WebRender wgpu backend and related experiments | custom forks |
 
 `main` is the branch most users should follow. `latest-release` only diverges
 once Servo ships a newer stable, non-LTS release beyond the current LTS line.

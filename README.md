@@ -1,12 +1,12 @@
 # wgpu-graft
 
-Rust workspace for embedding [Servo](https://servo.org) web content into host applications. It provides the low-level texture interop plumbing (GL/Vulkan/Metal/DX12 → wgpu) and a set of reference demos showing how to embed Servo in different GUI frameworks.
+Rust workspace for embedding [Servo](https://servo.org) web content into host applications. It provides the low-level texture interop plumbing (GL/Vulkan/Metal/DX12 → wgpu) and a set of reference demos showing how to embed Servo in different GUI frameworks. Derived from a [Slint](https://slint.dev/blog/using-servo-with-slint) embedding [example](https://github.com/slint-ui/slint/tree/master/examples/servo).
 
-The name comes from the surgical/horticultural sense: an external producer's GPU texture is *grafted* onto a host-owned `wgpu` texture, so the host can composite web content as just another textured surface.
+If you're looking to embed a web renderer in your Rust application, start with the demo closest to your stack and adapt from there. No promises! These are generated reference implementations to see what's possible. The demos are a bit rough but should be straightforward to understand and adapt.
 
-If you're looking to embed a web renderer in your Rust application, start with the demo closest to your stack and adapt from there. No promises! These are generated reference implementations to see what's possible, but the core interop crate is hopefully reusable and framework-agnostic.
+To be clear and upfront: I used AI for pretty much all of it, adapting the Slint folks' Servo embedding example, and I think it turned out pretty well, considering I really just wanted to see Servo in some more esoteric GUI frameworks. I don't have Linux or Mac hardware to test those, so contributions are very welcome, but I would direct them to the Slint repo linked above first and foremost!
 
-Also, to be clear and upfront, I used AI for pretty much all of it, adapting the Slint folks' Servo embedding example, and I think it turned out pretty well, considering. The demos are a bit rough but should be straightforward to understand and adapt. I wanted to see Servo in some more esoteric GUI frameworks, but I don't have Linux or Mac hardware to test those, so contributions are very welcome!
+The core crate this depends upon, [`scrying`](https://github.com/mark-ik/scrying), has been abstracted from Servo to become renderer agnostic, and I am now using it to attempt a similar thing with system webviews.
 
 ## Crates
 

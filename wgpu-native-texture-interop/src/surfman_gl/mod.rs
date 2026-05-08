@@ -1,3 +1,4 @@
+mod adapter;
 mod surfman_frame_context;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -11,6 +12,8 @@ mod windows;
 
 #[cfg(target_os = "windows")]
 mod windows_dx12_shared;
+
+pub use adapter::select_adapter_matching_surfman_luid;
 
 use std::cell::Cell;
 use std::rc::Rc;

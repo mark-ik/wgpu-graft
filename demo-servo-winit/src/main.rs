@@ -315,11 +315,16 @@ struct Renderer {
 
 impl Renderer {
     async fn new(window: Arc<Window>) -> Result<Self, String> {
-        // On Windows, prefer Vulkan so the ANGLE D3D11 share handle import path works.
-        // Allow DX12 as a fallback for systems without a Vulkan driver.
+        // On Windows, force DX12 so the ANGLE D3D11 → DX12 shared-NT-handle
+        // import path (`surfman_gl::windows_dx12_shared`) is exercised. The
+        // older Vulkan + ANGLE-D3D11 KMT path still works and can be selected
+        // by setting `WGPU_BACKEND=vulkan` in the environment.
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             #[cfg(target_os = "windows")]
-            backends: wgpu::Backends::VULKAN | wgpu::Backends::DX12,
+            backends: match std::env::var("WGPU_BACKEND").as_deref() {
+                Ok("vulkan") => wgpu::Backends::VULKAN,
+                _ => wgpu::Backends::DX12,
+            },
             #[cfg(not(target_os = "windows"))]
             backends: wgpu::Backends::all(),
             flags: wgpu::InstanceFlags::default(),
@@ -364,6 +369,8 @@ impl Renderer {
             })
             .await
             .map_err(|error| error.to_string())?;
+
+        wgpu_native_texture_interop::print_wgpu_backend(&device);
 
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps

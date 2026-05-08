@@ -713,6 +713,28 @@ fn import_dx12_shared_texture(
     ))
 }
 
+/// Returns a human-readable name of the wgpu backend powering `device`.
+///
+/// Useful for `eprintln!`/log lines on startup so the active graphics API is
+/// visible without rebuilding with `RUST_LOG=wgpu=debug`. Returns `"Unknown"`
+/// when the backend can't be detected (e.g. no `as_hal` impl matches).
+pub fn backend_name(device: &wgpu::Device) -> &'static str {
+    match detect_backend(device) {
+        InteropBackend::Vulkan => "Vulkan",
+        InteropBackend::Metal => "Metal",
+        InteropBackend::Dx12 => "DirectX 12",
+        InteropBackend::Unknown => "Unknown",
+    }
+}
+
+/// Logs the active wgpu backend to stderr.
+///
+/// Equivalent to `eprintln!("[wgpu] backend: {}", backend_name(device))`.
+/// Prefer [`backend_name`] when you want to route the value to a logger.
+pub fn print_wgpu_backend(device: &wgpu::Device) {
+    eprintln!("[wgpu] backend: {}", backend_name(device));
+}
+
 fn detect_backend(device: &wgpu::Device) -> InteropBackend {
     unsafe {
         // wgpu::wgc::api::Vulkan is only compiled in when the hal `vulkan` cfg

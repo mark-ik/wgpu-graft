@@ -6,6 +6,27 @@ All notable changes to this project will be documented here.
 
 ### Added — `wgpu-native-texture-interop` 0.2.0
 
+- `surfman_gl::windows_dx12_shared`: ANGLE D3D11 → wgpu DX12 zero-copy
+  import path. Allocates an `ID3D11Texture2D` with
+  `D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE` on
+  ANGLE's own D3D11 device, wraps it as a transient EGL pbuffer surface
+  for ANGLE/GL writes, and opens the same NT handle on the host wgpu
+  DX12 device via `ID3D12Device::OpenSharedHandle`. Closes the gap
+  where `raw_gl::dx12` could not service ANGLE-Servo (which lacks
+  `GL_EXT_memory_object_win32`). Adapted from slint examples/servo
+  (#11089). Size-dependent state is cached on `SurfmanFrameProducer`
+  via `AngleDx12SharedCache` and reused across frames so the wgpu
+  texture handle stays stable
+- `surfman_gl::select_adapter_matching_surfman_luid`: Windows multi-GPU
+  adapter selection helper that matches wgpu's adapter LUID to
+  surfman's underlying D3D11 device LUID. On hosts with both an
+  integrated and discrete GPU, wgpu's `request_adapter` and surfman's
+  `Connection::create_adapter` may otherwise pick different drivers,
+  silently breaking the shared-NT-handle interop. Adapted from slint
+  examples/servo (#11439)
+- `backend_name(&wgpu::Device) -> &'static str` and
+  `print_wgpu_backend(&wgpu::Device)`: reports the active wgpu graphics
+  backend in human-readable form for startup observability
 - `Dx12FenceSynchronizer`: explicit `D3D12_FENCE_FLAG_SHARED` fence
   synchronizer for cross-API texture handoff. Creates a shared fence on
   the wgpu D3D12 device, exports an NT handle for D3D11/D3D12 producers,
@@ -35,14 +56,33 @@ All notable changes to this project will be documented here.
 - `CapabilityMatrix::vulkan_external_image`: now reports `Supported`
   on Linux + Vulkan host backend (was
   `Unsupported(NativeImportNotYetImplemented)`)
-- Cargo features: added `Win32_Security` to the `windows` crate dep
-  (required by `ID3D12Device::CreateSharedHandle`); added `MTLEvent` to
-  `objc2-metal` (required by `newSharedEvent`)
+- `InteropBackend::Dx12` doc string updated to reflect that GL→DX12
+  import is now supported on ANGLE-backed surfman via
+  `surfman_gl::windows_dx12_shared`
+- Cargo features: added `Win32_Security` and `Win32_Graphics_Direct3D11`
+  to the `windows` crate dep (required by the new shared-D3D11 path);
+  added `sm-angle-default` to surfman (required for ANGLE-specific
+  `Device::create_surface_texture_from_texture`); added `wio = "0.2"`
+  for the surfman ANGLE method's `ComPtr` parameter; added `MTLEvent`
+  to `objc2-metal` (required by `newSharedEvent`)
+- Surfman rebind errors are now propagated through the Linux Vulkan,
+  Windows Vulkan, Windows DX12, and Apple Metal import paths (was
+  silently swallowed via `let _ = ...`). Both the import and rebind
+  attempt run; whichever fails surfaces (preferring the import error
+  if both fail). Adapted from slint examples/servo (#11497)
+
+### Demo changes
+
+- `demo-servo-winit`: switched the Windows wgpu instance from
+  `VULKAN | DX12` to forcing DX12 by default so the new
+  `surfman_gl::windows_dx12_shared` path is the exercised default.
+  `WGPU_BACKEND=vulkan` still selects the legacy ANGLE-D3D11 KMT →
+  Vulkan path. Calls `print_wgpu_backend` on startup.
 
 ### Added
 
 - `README.md`: documented the branch policy for `main`, `latest-release`,
-  `experimental`, and `servo-wgpu`, and clarified that `main` targets Servo
+  and `experimental`, and clarified that `main` targets Servo
   `v0.1.x` LTS
 - `demo-servo-xilem`: Servo embedded in Xilem 0.4 with URL bar, CPU readback,
   and full input forwarding (mouse, scroll, keyboard)

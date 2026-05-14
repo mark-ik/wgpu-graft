@@ -1,4 +1,4 @@
-# wgpu-native-texture-interop
+# grafting
 
 Import native GPU textures (GL framebuffers, Vulkan images, Metal IOSurfaces) into host-owned `wgpu` textures. This is the core library of the [servo-wgpu-interop](../) workspace.
 
@@ -41,10 +41,10 @@ For Servo embedding, pair this crate with [`servo-wgpu-interop-adapter`](../serv
 ```toml
 [dependencies]
 # Full (with surfman support):
-wgpu-native-texture-interop = "0.1"
+grafting = "0.1"
 
 # Minimal (raw GL only, no surfman):
-wgpu-native-texture-interop = { version = "0.1", default-features = false }
+grafting = { version = "0.1", default-features = false }
 ```
 
 ## License

@@ -4,7 +4,7 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
-### Added — `wgpu-native-texture-interop` 0.2.0
+### Added — `grafting` 0.2.0
 
 - `surfman_gl::windows_dx12_shared`: ANGLE D3D11 → wgpu DX12 zero-copy
   import path. Allocates an `ID3D11Texture2D` with
@@ -51,7 +51,7 @@ All notable changes to this project will be documented here.
   `dmabuf_fd`, `dmabuf_offset`, `dmabuf_stride`, `drm_modifier`,
   `wait_semaphore_fd`
 
-### Changed — `wgpu-native-texture-interop` 0.2.0
+### Changed — `grafting` 0.2.0
 
 - `CapabilityMatrix::vulkan_external_image`: now reports `Supported`
   on Linux + Vulkan host backend (was
@@ -98,12 +98,12 @@ All notable changes to this project will be documented here.
   compatibility with servo-layout
 - `patches/serde_fmt`: local serde_fmt fork removing ambiguous `From` impl
   that breaks stylo's `ToCss` derive on Rust 1.92
-- `wgpu-native-texture-interop`: public API doc comments on all major types
+- `grafting`: public API doc comments on all major types
   (`InteropBackend`, `CapabilityMatrix`, `NativeFrame`, `ImportOptions`, etc.)
-- `wgpu-native-texture-interop`: `#[non_exhaustive]` on `NativeFrame`,
+- `grafting`: `#[non_exhaustive]` on `NativeFrame`,
   `NativeFrameKind`, `InteropBackend`, `SyncMechanism`, `InteropError`, and
   `UnsupportedReason` to protect downstream users from semver breaks
-- `wgpu-native-texture-interop`, `servo-wgpu-interop-adapter`: crate-level
+- `grafting`, `servo-wgpu-interop-adapter`: crate-level
   `#![doc = include_str!("../README.md")]` so docs.rs renders the README
 
 ### Fixed
@@ -119,7 +119,7 @@ All notable changes to this project will be documented here.
   (IOSurface→Metal)
 - Windows Vulkan path (opaque Win32 NT handle) — builds and runs; depends on
   driver support for `VK_KHR_external_memory_win32` under WGL/EGL
-- `wgpu-native-texture-interop`: core library with trait-based API
+- `grafting`: core library with trait-based API
 - `servo-wgpu-interop-adapter`: Servo `RenderingContext` integration
 - `demo-raw-gl`: standalone glutin+glow FBO → wgpu demo (no Servo required)
 - `demo-servo-winit`: full Servo + winit + wgpu reference application

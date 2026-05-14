@@ -1,6 +1,6 @@
 ---
 name: slint upstream sync, branch propagation, and 0.2 publish prep
-description: Plan to absorb slint examples/servo upstream changes (Apr–May 2026), propagate main onto sibling branches, and stage the wgpu-native-texture-interop 0.2.0 release.
+description: Plan to absorb slint examples/servo upstream changes (Apr–May 2026), propagate main onto sibling branches, and stage the grafting 0.2.0 release.
 type: plan
 date: 2026-05-07
 ---
@@ -48,7 +48,7 @@ Three sibling branches that existed before this pass were retired (deleted on re
 Establish a green baseline before adding new code.
 
 1. `cargo check --workspace` on Linux + Windows (CI exists; trigger or run locally).
-2. `cargo test -p wgpu-native-texture-interop` (unit tests).
+2. `cargo test -p grafting` (unit tests).
 3. Manual run of `demo-servo-winit https://example.com` on Windows to confirm the existing CPU readback + ANGLE D3D11→Vulkan paths still work.
 4. Document baseline output of the new `print_wgpu_backend` helper (added in P2) before adding it, so the before/after is visible in the next demo run.
 
@@ -58,7 +58,7 @@ Exit criteria: green check + green tests + a Servo demo renders.
 
 **Source:** `examples/servo/src/webview/rendering_context/directx.rs` (slint `042175d` + later refinements through `e87fabd`).
 
-**Target:** new module `wgpu-native-texture-interop/src/raw_gl/angle_dx12_shared.rs` (sibling to `angle_d3d11.rs`).
+**Target:** new module `grafting/src/raw_gl/angle_dx12_shared.rs` (sibling to `angle_d3d11.rs`).
 
 **What it does:**
 1. Creates an `ID3D11Texture2D` with `D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE` on the *ANGLE D3D11 device* obtained via `surfman::Device::native_device().d3d11_device`.
@@ -97,13 +97,13 @@ Exit criteria: green check + green tests + a Servo demo renders.
 2. **All `demo-servo-*`** crates that construct their own `wgpu::Instance` — invoke the new helper.
    - Demos that are NOT Windows-DX-relevant (gpui/iced/xilem on CPU readback) can keep current adapter request.
 
-**`print_wgpu_backend(adapter: &wgpu::Adapter)`** lives in `wgpu-native-texture-interop` next to capability matrix; just logs `name | backend | driver`. Used by `demo-servo-winit` on startup.
+**`print_wgpu_backend(adapter: &wgpu::Adapter)`** lives in `grafting` next to capability matrix; just logs `name | backend | driver`. Used by `demo-servo-winit` on startup.
 
 ### Phase 3 — Metal cleanup (P3)
 
 **Source:** slint `445200d` — replace panics with `MetalTextureError` enum, inline IOSurface/texture creation, simplify wgpu type imports, move shared helpers to module roots.
 
-**Target:** `wgpu-native-texture-interop/src/raw_gl/metal.rs` (132 LOC) and `surfman_gl/metal/`.
+**Target:** `grafting/src/raw_gl/metal.rs` (132 LOC) and `surfman_gl/metal/`.
 
 **Concrete edits:**
 - Add `InteropError::Metal(MetalError)` variant where today some code paths `unwrap()` or `expect()`.
@@ -129,7 +129,7 @@ For each branch: green `cargo check`, push, observe CI.
 Update `CHANGELOG.md` `[Unreleased]` section under the existing 0.2.0 staging:
 
 ```markdown
-### Added — `wgpu-native-texture-interop` 0.2.0
+### Added — `grafting` 0.2.0
 
 - `raw_gl::angle_dx12_shared`: ANGLE D3D11 → wgpu DX12 zero-copy import path
   via shared NT-handle on a transient EGL pbuffer surface. Adapted from slint
@@ -141,10 +141,10 @@ Update `CHANGELOG.md` `[Unreleased]` section under the existing 0.2.0 staging:
 - `print_wgpu_backend`: backend observability helper.
 ```
 
-Bump `wgpu-native-texture-interop/Cargo.toml` from `0.2.0` to a release-ready `0.2.0` (already there) and tag the commit `wgpu-native-texture-interop-v0.2.0` *without* publishing. `servo-wgpu-interop-adapter` stays at `0.1.0` (unpublished) — first publish pairs naturally with this 0.2.0 release.
+Bump `grafting/Cargo.toml` from `0.2.0` to a release-ready `0.2.0` (already there) and tag the commit `grafting-v0.2.0` *without* publishing. `servo-wgpu-interop-adapter` stays at `0.1.0` (unpublished) — first publish pairs naturally with this 0.2.0 release.
 
 **Publish gate (next session):**
-- `cargo publish --dry-run -p wgpu-native-texture-interop`
+- `cargo publish --dry-run -p grafting`
 - `cargo publish --dry-run -p servo-wgpu-interop-adapter`
 - Confirm dry-runs clean, then real publish.
 
@@ -153,7 +153,7 @@ Bump `wgpu-native-texture-interop/Cargo.toml` from `0.2.0` to a release-ready `0
 | Check | Target | When |
 |---|---|---|
 | `cargo check --workspace` | linux + windows | end of every phase |
-| `cargo test -p wgpu-native-texture-interop` | linux + windows | end of every phase |
+| `cargo test -p grafting` | linux + windows | end of every phase |
 | `demo-servo-winit https://servo.org` with `WGPU_BACKEND=dx12` | windows | end of Phase 1 |
 | `demo-servo-winit` on dual-GPU host | windows + multi-GPU | end of Phase 2 |
 | `demo-servo-winit https://servo.org` with no env override | macOS | end of Phase 3 |

@@ -3,11 +3,11 @@ name = "demo-raw-gl"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Minimal demo: raw GL rendering imported into a wgpu host via wgpu-native-texture-interop"
+description = "Minimal demo: raw GL rendering imported into a wgpu host via grafting"
 
 [dependencies]
 wgpu = { version = "29.0.1", features = ["metal"] }
-wgpu-native-texture-interop = { path = "../wgpu-native-texture-interop", default-features = false }
+grafting = { path = "../grafting", default-features = false }
 glow = "0.16.0"
 glutin = "0.32.3"
 glutin-winit = "0.5.0"

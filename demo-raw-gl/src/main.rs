@@ -1,6 +1,6 @@
 //! Minimal demo: raw GL rendering imported into a wgpu host.
 //!
-//! This demonstrates using `wgpu-native-texture-interop` without surfman.
+//! This demonstrates using `grafting` without surfman.
 //! A GL context renders a spinning triangle to an offscreen FBO, which is
 //! imported into a wgpu texture and presented in a winit window.
 //!
@@ -24,7 +24,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::Window;
 
-use wgpu_native_texture_interop::{
+use grafting::{
     FrameProducer, HostWgpuContext, ImportOptions, TextureImporter, WgpuTextureImporter,
     raw_gl::producer::RawGlFrameProducer,
 };
@@ -113,7 +113,7 @@ impl AppState {
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
-                    .with_title("demo-raw-gl (wgpu-native-texture-interop)")
+                    .with_title("demo-raw-gl (grafting)")
                     .with_inner_size(PhysicalSize::new(800, 600)),
             )?,
         );

@@ -30,7 +30,7 @@ use servo::{
 use servo_wgpu_interop_adapter::ServoWgpuInteropAdapter;
 use url::Url;
 use wgpu::CurrentSurfaceTexture;
-use wgpu_native_texture_interop::{HostWgpuContext, InteropBackend};
+use grafting::{HostWgpuContext, InteropBackend};
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
@@ -370,7 +370,7 @@ impl Renderer {
             .await
             .map_err(|error| error.to_string())?;
 
-        wgpu_native_texture_interop::print_wgpu_backend(&device);
+        grafting::print_wgpu_backend(&device);
 
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps

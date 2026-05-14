@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use euclid::default::Size2D;
 use surfman::{Connection, Device, SurfaceType, chains::SwapChain};
-use wgpu_native_texture_interop::{
+use grafting::{
     FrameProducer, HostWgpuContext, ImportOptions, ImportedTexture, InteropError, TextureImporter,
     WgpuTextureImporter,
     surfman_gl::{SurfmanFrameContext, SurfmanFrameProducer},
@@ -18,7 +18,7 @@ use servo::{DeviceIntRect, RenderingContext};
 #[cfg(feature = "servo")]
 use surfman::{Surface, SurfaceTexture, chains::PreserveBuffer};
 
-pub use wgpu_native_texture_interop::{
+pub use grafting::{
     ImportOptions as InteropImportOptions, ImportedTexture as InteropImportedTexture,
 };
 
@@ -59,7 +59,7 @@ impl ServoWgpuRenderingContext {
 
     pub fn acquire_native_frame(
         &self,
-    ) -> Result<wgpu_native_texture_interop::NativeFrame, InteropError> {
+    ) -> Result<grafting::NativeFrame, InteropError> {
         self.frame_producer.borrow_mut().acquire_frame()
     }
 

@@ -31,8 +31,8 @@ use crate::{
 ///
 /// ```ignore
 /// use std::sync::Arc;
-/// use wgpu_native_texture_interop::raw_gl::producer::RawGlFrameProducer;
-/// use wgpu_native_texture_interop::{WgpuTextureImporter, HostWgpuContext, ImportOptions};
+/// use grafting::raw_gl::producer::RawGlFrameProducer;
+/// use grafting::{WgpuTextureImporter, HostWgpuContext, ImportOptions};
 /// use dpi::PhysicalSize;
 ///
 /// let host = HostWgpuContext::new(device, queue);

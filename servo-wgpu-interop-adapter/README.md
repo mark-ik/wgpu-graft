@@ -1,6 +1,6 @@
 # servo-wgpu-interop-adapter
 
-Servo-specific offscreen rendering adapter built on [`wgpu-native-texture-interop`](../wgpu-native-texture-interop/).
+Servo-specific offscreen rendering adapter built on [`grafting`](../grafting/).
 
 This crate bridges Servo's rendering context to the host application. It provides two things:
 

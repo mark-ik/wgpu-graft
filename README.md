@@ -10,7 +10,7 @@ To be clear and upfront: I used AI for pretty much all of it, adapting the Slint
 
 | Crate | Purpose |
 | --- | --- |
-| [`wgpu-native-texture-interop`](wgpu-native-texture-interop/) | Core library: imports native GPU textures (GL FBO, Vulkan image, Metal IOSurface) into host-owned `wgpu` textures. Framework-agnostic, no Servo dependency required. |
+| [`grafting`](grafting/) | Core library: imports native GPU textures (GL FBO, Vulkan image, Metal IOSurface) into host-owned `wgpu` textures. Framework-agnostic, no Servo dependency required. |
 | [`servo-wgpu-interop-adapter`](servo-wgpu-interop-adapter/) | Servo-specific adapter: wraps Servo's offscreen rendering context and bridges it to the core interop crate. Provides `ServoWgpuRenderingContext` for CPU readback and `ServoWgpuInteropAdapter` for zero-copy GPU import. |
 
 ## Demos
@@ -35,7 +35,7 @@ Each demo embeds Servo in a different Rust GUI framework to show that the approa
 
 ```bash
 # Core crate tests
-cargo test -p wgpu-native-texture-interop
+cargo test -p grafting
 
 # Build check (requires Servo git dependency)
 cargo check -p servo-wgpu-interop-adapter --features servo

@@ -2,12 +2,12 @@
 
 Standalone GL→wgpu texture import demo. A glutin+glow GL context renders a spinning triangle to an offscreen FBO, which is imported into a host-owned `wgpu` texture and composited to screen.
 
-**No Servo dependency.** This demo proves the core `wgpu-native-texture-interop` layer works independently of Servo and surfman.
+**No Servo dependency.** This demo proves the core `grafting` layer works independently of Servo and surfman.
 
 ## What it demonstrates
 
 - Creating an offscreen GL framebuffer with glow
-- Importing the GL FBO into a wgpu texture via `wgpu-native-texture-interop` (using `default-features = false` to skip surfman)
+- Importing the GL FBO into a wgpu texture via `grafting` (using `default-features = false` to skip surfman)
 - Presenting the imported texture through a wgpu fullscreen-quad render pipeline
 - Continuous animation to validate repeated frame import
 

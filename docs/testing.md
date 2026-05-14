@@ -6,7 +6,7 @@ This workspace ships multiple demos embedding Servo in different GUI frameworks,
 
 ```bash
 # Core crate tests
-cargo test -p wgpu-native-texture-interop
+cargo test -p grafting
 
 # Build checks
 cargo check -p servo-wgpu-interop-adapter --features servo

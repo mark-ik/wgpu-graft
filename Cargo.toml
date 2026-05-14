@@ -5,7 +5,7 @@ members = [
     "demo-servo-iced",
     "demo-servo-winit",
     "demo-servo-xilem",
-    "wgpu-native-texture-interop",
+    "grafting",
     "servo-wgpu-interop-adapter",
 ]
 resolver = "3"

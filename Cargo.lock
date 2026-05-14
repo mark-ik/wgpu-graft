@@ -2062,10 +2062,10 @@ dependencies = [
  "glow 0.16.0",
  "glutin",
  "glutin-winit",
+ "grafting",
  "pollster 0.4.0",
  "raw-window-handle",
  "wgpu 29.0.1",
- "wgpu-native-texture-interop",
  "winit",
 ]
 
@@ -2102,6 +2102,7 @@ name = "demo-servo-winit"
 version = "0.1.0"
 dependencies = [
  "euclid",
+ "grafting",
  "image",
  "pollster 0.4.0",
  "rustls",
@@ -2109,7 +2110,6 @@ dependencies = [
  "servo-wgpu-interop-adapter",
  "url",
  "wgpu 29.0.1",
- "wgpu-native-texture-interop",
  "winit",
 ]
 
@@ -3708,6 +3708,31 @@ dependencies = [
  "gpui_perf",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "grafting"
+version = "0.2.0"
+dependencies = [
+ "ash",
+ "dpi",
+ "euclid",
+ "foreign-types-shared",
+ "gl_generator",
+ "gleam",
+ "glow 0.16.0",
+ "image",
+ "metal 0.33.0",
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
+ "objc2-io-surface",
+ "objc2-metal 0.3.2",
+ "surfman",
+ "thiserror 2.0.18",
+ "wgpu 29.0.1",
+ "wgpu-hal 29.0.1",
+ "windows 0.62.2",
+ "wio",
 ]
 
 [[package]]
@@ -9940,12 +9965,12 @@ dependencies = [
  "euclid",
  "gleam",
  "glow 0.16.0",
+ "grafting",
  "image",
  "rustls",
  "servo",
  "surfman",
  "wgpu 29.0.1",
- "wgpu-native-texture-interop",
  "winit",
 ]
 
@@ -12820,31 +12845,6 @@ checksum = "7b4684f4410da0cf95a4cb63bb5edaac022461dedb6adf0b64d0d9b5f6890d51"
 dependencies = [
  "naga 29.0.1",
  "wgpu-types 29.0.1",
-]
-
-[[package]]
-name = "wgpu-native-texture-interop"
-version = "0.2.0"
-dependencies = [
- "ash",
- "dpi",
- "euclid",
- "foreign-types-shared",
- "gl_generator",
- "gleam",
- "glow 0.16.0",
- "image",
- "metal 0.33.0",
- "objc2 0.6.4",
- "objc2-foundation 0.3.2",
- "objc2-io-surface",
- "objc2-metal 0.3.2",
- "surfman",
- "thiserror 2.0.18",
- "wgpu 29.0.1",
- "wgpu-hal 29.0.1",
- "windows 0.62.2",
- "wio",
 ]
 
 [[package]]

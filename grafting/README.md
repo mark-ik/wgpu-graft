@@ -41,10 +41,10 @@ For Servo embedding, pair this crate with [`servo-wgpu-interop-adapter`](../serv
 ```toml
 [dependencies]
 # Full (with surfman support):
-grafting = "0.1"
+grafting = "0.3"
 
 # Minimal (raw GL only, no surfman):
-grafting = { version = "0.1", default-features = false }
+grafting = { version = "0.3", default-features = false }
 ```
 
 ## License

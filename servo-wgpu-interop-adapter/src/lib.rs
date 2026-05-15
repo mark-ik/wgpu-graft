@@ -18,10 +18,6 @@ use servo::{DeviceIntRect, RenderingContext};
 #[cfg(feature = "servo")]
 use surfman::{Surface, SurfaceTexture, chains::PreserveBuffer};
 
-pub use grafting::{
-    ImportOptions as InteropImportOptions, ImportedTexture as InteropImportedTexture,
-};
-
 pub struct ServoWgpuRenderingContext {
     frame_producer: RefCell<SurfmanFrameProducer>,
     swap_chain: SwapChain<Device>,

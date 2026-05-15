@@ -4,7 +4,37 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
-### Added — `grafting` 0.2.0
+## [grafting 0.3.0]
+
+### Renamed
+
+- Crate renamed from `wgpu-native-texture-interop` to `grafting`. The
+  prior name was published at 0.1.0 / 0.2.0; new releases ship as
+  `grafting`. No migration shim — update imports from
+  `wgpu_native_texture_interop::` to `grafting::`.
+
+### Breaking
+
+- `ImportOptions` is now `#[non_exhaustive]`. Construct via
+  `ImportOptions::default()` and mutate fields, rather than struct-literal
+  initialization, so future fields don't break callers
+- Removed `ImportOptions::allow_copy_fallback` — it was documented as
+  reserved-for-future-use and had no implementation. Will be re-added in
+  a future release if/when a CPU fallback path lands
+- `servo-wgpu-interop-adapter`: dropped the `InteropImportOptions` /
+  `InteropImportedTexture` re-exports. Callers should `use
+  grafting::{ImportOptions, ImportedTexture}` directly
+
+### Internal
+
+- Moved `MetalTextureRef` and `Dx12SharedTexture` unsafe import bodies out
+  of `lib.rs` into new `metal_texture_ref` and `dx12_shared_texture`
+  modules at crate root, mirroring the `vulkan_dmabuf` layout. Public API
+  unchanged; `lib.rs` is now ~700 lines of types-and-traits
+
+## [wgpu-native-texture-interop 0.2.0]
+
+### Added
 
 - `surfman_gl::windows_dx12_shared`: ANGLE D3D11 → wgpu DX12 zero-copy
   import path. Allocates an `ID3D11Texture2D` with
@@ -51,7 +81,7 @@ All notable changes to this project will be documented here.
   `dmabuf_fd`, `dmabuf_offset`, `dmabuf_stride`, `drm_modifier`,
   `wait_semaphore_fd`
 
-### Changed — `grafting` 0.2.0
+### Changed
 
 - `CapabilityMatrix::vulkan_external_image`: now reports `Supported`
   on Linux + Vulkan host backend (was
@@ -79,7 +109,7 @@ All notable changes to this project will be documented here.
   `WGPU_BACKEND=vulkan` still selects the legacy ANGLE-D3D11 KMT →
   Vulkan path. Calls `print_wgpu_backend` on startup.
 
-### Added
+### Added (workspace)
 
 - `README.md`: documented the branch policy for `main`, `latest-release`,
   and `experimental`, and clarified that `main` targets Servo

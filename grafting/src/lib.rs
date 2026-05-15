@@ -13,6 +13,12 @@ mod sync_metal;
 #[cfg(target_os = "linux")]
 mod vulkan_dmabuf;
 
+#[cfg(target_vendor = "apple")]
+mod metal_texture_ref;
+
+#[cfg(target_os = "windows")]
+mod dx12_shared_texture;
+
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
 mod gl_bindings {
     #![allow(unsafe_op_in_unsafe_fn)]
@@ -153,10 +159,8 @@ impl HostWgpuContext {
 
 /// Options that control how [`WgpuTextureImporter`] processes each frame.
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub struct ImportOptions {
-    /// If `true`, fall back to a CPU-side copy when the zero-copy path is
-    /// unavailable. Currently unused — reserved for future use.
-    pub allow_copy_fallback: bool,
     /// If `true` (default), the importer runs a GPU blit/shader pass to
     /// flip the texture to [`TextureOrigin::TopLeft`]. Set to `false` only
     /// if you want the raw GL bottom-left orientation.
@@ -170,7 +174,6 @@ pub struct ImportOptions {
 impl Default for ImportOptions {
     fn default() -> Self {
         Self {
-            allow_copy_fallback: false,
             normalize_origin: true,
             normalize_format: true,
         }
@@ -323,9 +326,6 @@ pub struct Dx12SharedTexture {
     pub handle: *mut std::ffi::c_void,
 }
 
-/// A frame produced by a [`FrameProducer`], ready to be imported by a
-/// [`TextureImporter`].
-///
 /// A frame produced by a [`FrameProducer`], ready to be imported by a
 /// [`TextureImporter`].
 ///
@@ -559,64 +559,7 @@ fn import_metal_texture_ref(
 ) -> Result<ImportedTexture, InteropError> {
     #[cfg(target_vendor = "apple")]
     {
-        use foreign_types_shared::ForeignType;
-        use objc2::rc::Retained;
-        use objc2::runtime::AnyObject;
-
-        if frame.raw_metal_texture.is_null() {
-            return Err(InteropError::InvalidFrame("raw_metal_texture is null"));
-        }
-        if host.backend != InteropBackend::Metal {
-            return Err(InteropError::BackendMismatch {
-                expected: "Metal",
-                actual: "non-Metal",
-            });
-        }
-
-        let texture = unsafe {
-            // Retain the caller's MTLTexture so that wgpu can take ownership
-            // of the reference we hand it without invalidating the caller's copy.
-            let obj_ptr = frame.raw_metal_texture as *mut AnyObject;
-            let retained = Retained::retain(obj_ptr)
-                .ok_or_else(|| InteropError::Metal("failed to retain Metal texture".into()))?;
-            let raw_ptr = Retained::into_raw(retained) as *mut _;
-            let metal_texture = metal::Texture::from_ptr(raw_ptr);
-
-            // texture_from_raw is a free associated function — matches the
-            // signature used in raw_gl/metal.rs.
-            let hal_texture = wgpu::hal::metal::Device::texture_from_raw(
-                metal_texture,
-                frame.format,
-                metal::MTLTextureType::D2,
-                0, // array_layers
-                0, // mip_levels
-                wgpu::hal::CopyExtent {
-                    width: frame.size.width,
-                    height: frame.size.height,
-                    depth: 0,
-                },
-            );
-
-            host.device
-                .create_texture_from_hal::<wgpu::wgc::api::Metal>(
-                    hal_texture,
-                    &wgpu::TextureDescriptor {
-                        label: Some("metal-texture-ref-import"),
-                        size: wgpu::Extent3d {
-                            width: frame.size.width,
-                            height: frame.size.height,
-                            depth_or_array_layers: 1,
-                        },
-                        format: frame.format,
-                        dimension: wgpu::TextureDimension::D2,
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-                        view_formats: &[],
-                    },
-                )
-        };
-
+        let texture = metal_texture_ref::import_metal_texture_ref(frame, host)?;
         return Ok(ImportedTexture {
             texture,
             format: frame.format,
@@ -639,64 +582,7 @@ fn import_dx12_shared_texture(
 ) -> Result<ImportedTexture, InteropError> {
     #[cfg(target_os = "windows")]
     {
-        if host.backend != InteropBackend::Dx12 {
-            return Err(InteropError::BackendMismatch {
-                expected: "Dx12",
-                actual: "non-Dx12",
-            });
-        }
-
-        let texture = unsafe {
-            let hal_device = host.device.as_hal::<wgpu::wgc::api::Dx12>().ok_or(
-                InteropError::BackendMismatch {
-                    expected: "Dx12",
-                    actual: "non-Dx12",
-                },
-            )?;
-
-            let d3d_device = hal_device.raw_device().clone();
-            let mut resource: Option<windows::Win32::Graphics::Direct3D12::ID3D12Resource> = None;
-            d3d_device
-                .OpenSharedHandle(
-                    windows::Win32::Foundation::HANDLE(frame.handle as *mut std::ffi::c_void),
-                    &mut resource,
-                )
-                .map_err(|e| InteropError::Dx12(e.to_string()))?;
-            let resource = resource
-                .ok_or_else(|| InteropError::Dx12("OpenSharedHandle returned null".into()))?;
-
-            let hal_texture = wgpu_hal::dx12::Device::texture_from_raw(
-                resource,
-                frame.format,
-                wgpu::TextureDimension::D2,
-                wgpu::Extent3d {
-                    width: frame.size.width,
-                    height: frame.size.height,
-                    depth_or_array_layers: 1,
-                },
-                1, // mip_level_count
-                1, // sample_count
-            );
-
-            host.device.create_texture_from_hal::<wgpu::wgc::api::Dx12>(
-                hal_texture,
-                &wgpu::TextureDescriptor {
-                    label: Some("dx12-shared-texture-import"),
-                    size: wgpu::Extent3d {
-                        width: frame.size.width,
-                        height: frame.size.height,
-                        depth_or_array_layers: 1,
-                    },
-                    format: frame.format,
-                    dimension: wgpu::TextureDimension::D2,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-                    view_formats: &[],
-                },
-            )
-        };
-
+        let texture = dx12_shared_texture::import_dx12_shared_texture(frame, host)?;
         return Ok(ImportedTexture {
             texture,
             format: frame.format,
@@ -766,7 +652,6 @@ mod tests {
     fn import_options_default_prefers_normalized_textures() {
         let options = ImportOptions::default();
 
-        assert!(!options.allow_copy_fallback);
         assert!(options.normalize_origin);
         assert!(options.normalize_format);
     }

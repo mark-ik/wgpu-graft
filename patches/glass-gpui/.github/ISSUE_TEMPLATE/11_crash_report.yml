@@ -1,0 +1,42 @@
+name: Report a crash
+description: GPUI is crashing, hanging, or hitting a fatal assertion.
+labels: "bug"
+body:
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+      description: Provide the shortest sequence that reproduces the crash.
+      placeholder: |
+        1. Launch the example or app
+        2. Perform an action
+        3. The process crashes or hangs
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What happened right before the crash?
+      placeholder: |
+        - Active example or app:
+        - UI action or API call:
+        - Panic message / assertion / signal, if known:
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Environment
+      placeholder: |
+        GPUI revision:
+        OS:
+        Architecture:
+        Rust toolchain:
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Panic, backtrace, or crash log
+      value: |
+        ```text
+
+        ```
+    validations:
+      required: false

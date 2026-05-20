@@ -193,6 +193,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
 dependencies = [
  "cfg-if",
+ "const-random",
  "getrandom 0.3.4",
  "once_cell",
  "version_check",
@@ -484,9 +485,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "340e0f6bf7f9ee78549c61454f1460a3ed97c011902ee76b58301bbc6d502a32"
 dependencies = [
  "enumflags2",
+ "futures-channel",
  "futures-util",
  "getrandom 0.4.2",
  "serde",
+ "serde_repr",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
  "zbus",
 ]
 
@@ -1619,7 +1625,6 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "indexmap",
  "rustc-hash 2.1.2",
@@ -1712,6 +1717,26 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
+
+[[package]]
+name = "const-random"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87e00182fe74b066627d63b85fd550ac2998d4b0bd86bfed477a0ae4c7c71359"
+dependencies = [
+ "const-random-macro",
+]
+
+[[package]]
+name = "const-random-macro"
+version = "0.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9d839f2a20b0aee515dc581a6172f2321f96cab76c1a38a4c584a194955390e"
+dependencies = [
+ "getrandom 0.2.17",
+ "once_cell",
+ "tiny-keccak",
+]
 
 [[package]]
 name = "content-security-policy"
@@ -2377,7 +2402,6 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2929,6 +2953,17 @@ name = "fiat-crypto"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
+
+[[package]]
+name = "filedescriptor"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e40758ed24c9b2eeb76c35fb0aebc66c626084edd827e07e1552279814c6682d"
+dependencies = [
+ "libc",
+ "thiserror 1.0.69",
+ "winapi",
+]
 
 [[package]]
 name = "filetime"
@@ -3674,7 +3709,6 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.2.2"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "async-channel 2.5.0",
@@ -3756,7 +3790,6 @@ dependencies = [
 [[package]]
 name = "gpui_apple"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "block",
@@ -3774,7 +3807,6 @@ dependencies = [
 [[package]]
 name = "gpui_examples"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "gpui",
  "log",
@@ -3784,7 +3816,6 @@ dependencies = [
 [[package]]
 name = "gpui_ios"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "block",
@@ -3814,19 +3845,25 @@ dependencies = [
 [[package]]
 name = "gpui_linux"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
+ "as-raw-xcb-connection",
+ "ashpd",
+ "bitflags 2.11.1",
  "bytemuck",
  "calloop 0.14.4",
+ "calloop-wayland-source 0.4.1",
  "collections",
+ "filedescriptor",
  "futures",
  "gpui",
+ "gpui_wgpu",
  "http_client",
  "itertools 0.14.0",
  "libc",
  "log",
  "oo7",
+ "open",
  "parking_lot",
  "pathfinder_geometry",
  "pollster 0.4.0",
@@ -3839,12 +3876,22 @@ dependencies = [
  "url",
  "util",
  "uuid",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-cursor",
+ "wayland-protocols",
+ "wayland-protocols-plasma",
+ "wayland-protocols-wlr",
+ "x11-clipboard",
+ "x11rb",
+ "xkbcommon",
+ "zed-scap",
+ "zed-xim",
 ]
 
 [[package]]
 name = "gpui_macos"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "async-task",
@@ -3885,7 +3932,6 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3896,7 +3942,6 @@ dependencies = [
 [[package]]
 name = "gpui_metal"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "block",
@@ -3921,7 +3966,6 @@ dependencies = [
 [[package]]
 name = "gpui_platform"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "console_error_panic_hook",
  "gpui",
@@ -3935,7 +3979,6 @@ dependencies = [
 [[package]]
 name = "gpui_util"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "log",
@@ -3944,7 +3987,6 @@ dependencies = [
 [[package]]
 name = "gpui_web"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -3968,7 +4010,6 @@ dependencies = [
 [[package]]
 name = "gpui_wgpu"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -3990,12 +4031,12 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu 29.0.3",
+ "zed-font-kit",
 ]
 
 [[package]]
 name = "gpui_windows"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "collections",
@@ -4398,7 +4439,6 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -5473,6 +5513,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 
 [[package]]
+name = "is-docker"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
+dependencies = [
+ "once_cell",
+]
+
+[[package]]
+name = "is-wsl"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "173609498df190136aa7dea1a91db051746d339e18476eed5ca40521f02d7aa5"
+dependencies = [
+ "is-docker",
+ "once_cell",
+]
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6099,7 +6158,6 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -7220,6 +7278,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
+name = "open"
+version = "5.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fbaa89d2ddc8473c78a3adf69eea8cffa28c483b8e02a971ef31527cd0fc92c"
+dependencies = [
+ "is-wsl",
+ "libc",
+ "pathdiff",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7411,6 +7480,12 @@ name = "pastey"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
+
+[[package]]
+name = "pathdiff"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 
 [[package]]
 name = "pathfinder_geometry"
@@ -8302,7 +8377,6 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "derive_refineable",
 ]
@@ -8682,7 +8756,6 @@ dependencies = [
 [[package]]
 name = "scheduler"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "async-task",
  "backtrace",
@@ -11117,7 +11190,6 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "heapless",
  "log",
@@ -11542,6 +11614,15 @@ checksum = "2e70e4c5a0e0a8a4823ad65dfe1a6930e4f4d756dcd9dd7939022b5e8c501215"
 dependencies = [
  "num-conv",
  "time-core",
+]
+
+[[package]]
+name = "tiny-keccak"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
+dependencies = [
+ "crunchy",
 ]
 
 [[package]]
@@ -12229,7 +12310,6 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/glass-hq/gpui?rev=650aab59d54f4f6f85d42c965831935568ac1162#650aab59d54f4f6f85d42c965831935568ac1162"
 dependencies = [
  "anyhow",
  "async-fs",
@@ -14380,6 +14460,7 @@ dependencies = [
  "once_cell",
  "rustix 1.1.4",
  "x11rb-protocol",
+ "xcursor",
 ]
 
 [[package]]
@@ -14467,6 +14548,34 @@ dependencies = [
  "anymore",
  "hashbrown 0.16.1",
  "tracing",
+]
+
+[[package]]
+name = "xim-ctext"
+version = "0.3.0"
+source = "git+https://github.com/zed-industries/xim-rs.git?rev=16f35a2c881b815a2b6cdfd6687988e84f8447d8#16f35a2c881b815a2b6cdfd6687988e84f8447d8"
+dependencies = [
+ "encoding_rs",
+]
+
+[[package]]
+name = "xim-parser"
+version = "0.2.1"
+source = "git+https://github.com/zed-industries/xim-rs.git?rev=16f35a2c881b815a2b6cdfd6687988e84f8447d8#16f35a2c881b815a2b6cdfd6687988e84f8447d8"
+dependencies = [
+ "bitflags 2.11.1",
+]
+
+[[package]]
+name = "xkbcommon"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d66ca9352cbd4eecbbc40871d8a11b4ac8107cfc528a6e14d7c19c69d0e1ac9"
+dependencies = [
+ "as-raw-xcb-connection",
+ "libc",
+ "memmap2",
+ "xkeysym",
 ]
 
 [[package]]
@@ -14724,6 +14833,19 @@ dependencies = [
  "windows-capture",
  "x11",
  "xcb",
+]
+
+[[package]]
+name = "zed-xim"
+version = "0.4.0-zed"
+source = "git+https://github.com/zed-industries/xim-rs.git?rev=16f35a2c881b815a2b6cdfd6687988e84f8447d8#16f35a2c881b815a2b6cdfd6687988e84f8447d8"
+dependencies = [
+ "ahash",
+ "hashbrown 0.14.5",
+ "log",
+ "x11rb",
+ "xim-ctext",
+ "xim-parser",
 ]
 
 [[package]]

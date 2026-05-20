@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-issue-config.json
+blank_issues_enabled: false
+contact_links:
+  - name: Feature request
+    url: https://github.com/Glass-HQ/gpui/discussions/new/choose
+    about: Propose API, platform, or framework improvements in Discussions before opening an implementation PR.
+  - name: Questions and support
+    url: https://github.com/Glass-HQ/gpui/discussions
+    about: Ask API or integration questions and discuss framework design.

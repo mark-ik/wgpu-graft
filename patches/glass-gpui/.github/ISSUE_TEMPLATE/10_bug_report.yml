@@ -1,0 +1,65 @@
+name: Report a bug
+description: Report a problem with GPUI.
+labels: "bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Is this bug already reported? Please search first and add a :+1: reaction if you find an existing issue: [search GPUI issues](https://github.com/Glass-HQ/gpui/issues).
+
+        Feature request? Please open a [discussion](https://github.com/Glass-HQ/gpui/discussions/new/choose) instead.
+  - type: dropdown
+    attributes:
+      label: Area
+      multiple: false
+      options:
+        - Core runtime
+        - Layout / rendering
+        - Input / events
+        - Text system
+        - macOS
+        - iOS
+        - Linux
+        - Windows
+        - Web
+        - Other / not sure
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reproduction you can. A standalone example or crate is ideal.
+      placeholder: |
+        1. Run the example or app
+        2. Trigger the interaction
+        3. Observe the incorrect behavior
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Current vs. Expected behavior
+      placeholder: |
+        Current behavior:
+        Expected behavior:
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Minimal code sample or repository
+      description: Paste a minimal snippet or link to a reproduction repository.
+      value: |
+        ```rust
+
+        ```
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Environment
+      placeholder: |
+        GPUI revision:
+        OS:
+        Architecture:
+        Rust toolchain:
+    validations:
+      required: true

@@ -4,6 +4,34 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Demo changes
+
+- All five demos now build and run on Linux (Fedora 44 / Mesa-RADV / Vulkan
+  verified). `demo-raw-gl`, `demo-servo-winit`, `demo-servo-iced`, and
+  `demo-servo-xilem` run directly; `demo-servo-gpui` works via the gpui
+  migration below.
+- `demo-servo-gpui`: migrated off Zed's published `gpui 0.2.2` (blade
+  renderer → naga 25, which collided with wgpu 29's naga 29) onto the
+  glass-hq/gpui fork, which renders through `gpui_wgpu` (wgpu 29) — no blade,
+  no naga conflict. Construction now goes through `gpui_platform::application()`
+  and `FocusHandle::focus` takes `(window, cx)`.
+
+### Patches
+
+- `patches/glass-gpui`: vendored copy of glass-hq/gpui (a wgpu-based,
+  Zed-tracking gpui fork) with two Linux build fixes that the fork's
+  "extract platform crates" refactor regressed:
+  - workspace `ashpd` pin bumped `0.12.1` → `0.13` (the `gpui_linux` code
+    already uses the 0.13 API — `ashpd::Uri`, etc. — and 0.13 renamed the
+    runtime feature `async-std` → `async-io` and gates portals behind
+    per-portal features, so `file_chooser`/`open_uri`/`settings` are enabled
+    explicitly);
+  - re-added `gpui::layer_shell::LayerShellNotSupportedError`, a 5-line
+    `thiserror` struct that the extraction dropped. Both are candidates to
+    upstream to glass-hq.
+- Removed the previous `patches/gpui` (stale Zed 0.2.2 + blade vendor),
+  superseded by `patches/glass-gpui`.
+
 ## [grafting 0.3.0]
 
 ### Renamed

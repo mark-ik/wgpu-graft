@@ -8,13 +8,24 @@ members = [
     "grafting",
     "servo-wgpu-interop-adapter",
 ]
+# patches/glass-gpui is itself a cargo workspace (the vendored glass-hq/gpui).
+# Exclude it so our workspace doesn't try to absorb its members; the gpui +
+# gpui_platform path deps resolve against its own [workspace].
+exclude = ["patches/glass-gpui"]
 resolver = "3"
 
 # gpui: switched from Zed's published `gpui = 0.2.2` (October 2025, blade
 # renderer pulling naga 25 → naga unification break) to the glass-hq fork
-# which is actively tracked against Zed head and uses wgpu 29 + naga 29
-# directly (no blade dep, no naga conflict). The fork inherits Zed's
-# `taffy = "=0.9.0"` pin though — see the taffy patch below.
+# which uses wgpu 29 + naga 29 directly (no blade dep, no naga conflict).
+# Vendored under patches/glass-gpui because the fork's HEAD doesn't build for
+# Linux out of the box — two regressions from its "extract platform crates"
+# refactor that we fix in the vendored copy:
+#   1. workspace `ashpd` pin left at 0.12.1 while gpui_linux uses 0.13 API
+#      (ashpd::Uri, etc.) — bumped to 0.13.
+#   2. `LayerShellNotSupportedError` (imported by gpui_linux from
+#      gpui::layer_shell) was dropped during extraction — re-added.
+# Both are worth upstreaming to glass-hq. The fork also inherits Zed's
+# `taffy = "=0.9.0"` pin — see the taffy patch below.
 #
 # serde_fmt 1.1.0 adds `impl From<serde_fmt::Error> for std::fmt::Error`.
 # On Rust 1.92 this creates an ambiguous `From` resolution in stylo's
@@ -38,7 +49,7 @@ resolver = "3"
 # `^0.10` request still resolves to crates.io 0.10.x. Remove when gpui
 # upstream lifts the `=0.9.0` pin.
 [patch.crates-io]
-gpui = { git = "https://github.com/glass-hq/gpui", rev = "650aab59d54f4f6f85d42c965831935568ac1162" }
+gpui = { path = "patches/glass-gpui/crates/gpui" }
 serde_fmt = { path = "patches/serde_fmt" }
 glslopt = { git = "https://github.com/jamienicol/glslopt-rs", rev = "68019f02a1437d785408ebc8ce7fd20341fffb8a" }
 yeslogic-fontconfig-sys = { path = "patches/yeslogic-fontconfig-sys" }

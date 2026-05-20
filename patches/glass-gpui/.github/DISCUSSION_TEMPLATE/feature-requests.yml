@@ -1,0 +1,29 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # Feature Request
+
+        Use this template to propose a new GPUI API, platform capability, or framework improvement.
+  - type: textarea
+    id: main
+    attributes:
+      label: Body
+      value: |
+        # What are you proposing?
+
+        Describe the API, capability, or framework change.
+
+        # Why does this matter?
+
+        What becomes easier, safer, or possible for applications using GPUI?
+
+        # Examples or prior art
+
+        Link to similar APIs, UI frameworks, or example designs if relevant.
+
+        # Possible approach or constraints
+
+        If you have ideas about platform limitations, tradeoffs, or API shape, include them here.
+    validations:
+      required: true

@@ -10,13 +10,20 @@
 //! at all — the producer hands the consumer a DMABUF fd directly, and the
 //! importer wraps it as a Vulkan image bound to externally-imported
 //! memory.
+//!
+//! # Device construction
+//!
+//! wgpu's default `Device` does not enable `VK_EXT_image_drm_format_modifier`,
+//! which the consumer-side `vkCreateImage` call requires. Use
+//! [`create_dmabuf_host_context`] to obtain a wgpu device with the necessary
+//! extensions enabled; passing a stock wgpu device to the importer will
+//! crash inside ash when the missing extension's function pointer fails
+//! to load.
 
-#[cfg(target_os = "linux")]
 use ash::vk;
 
 use crate::{HostWgpuContext, InteropError, VulkanExternalImage};
 
-#[cfg(target_os = "linux")]
 fn map_format(format: wgpu::TextureFormat) -> Result<vk::Format, InteropError> {
     match format {
         wgpu::TextureFormat::Rgba8Unorm => Ok(vk::Format::R8G8B8A8_UNORM),
@@ -30,7 +37,6 @@ fn map_format(format: wgpu::TextureFormat) -> Result<vk::Format, InteropError> {
     }
 }
 
-#[cfg(target_os = "linux")]
 pub(crate) fn import_vulkan_external_image(
     frame: &VulkanExternalImage,
     host: &HostWgpuContext,
@@ -84,7 +90,7 @@ pub(crate) fn import_vulkan_external_image(
             .array_layers(1)
             .samples(vk::SampleCountFlags::TYPE_1)
             .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
-            .usage(vk::ImageUsageFlags::SAMPLED)
+            .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_SRC)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .initial_layout(vk::ImageLayout::UNDEFINED)
             .push_next(&mut external_memory_info)
@@ -125,7 +131,7 @@ pub(crate) fn import_vulkan_external_image(
                         dimension: wgpu::TextureDimension::D2,
                         mip_level_count: 1,
                         sample_count: 1,
-                        usage: wgpu::TextureUses::RESOURCE,
+                        usage: wgpu::TextureUses::RESOURCE | wgpu::TextureUses::COPY_SRC,
                         view_formats: Vec::new(),
                         memory_flags: wgpu_hal::MemoryFlags::empty(),
                     },
@@ -146,7 +152,7 @@ pub(crate) fn import_vulkan_external_image(
                     dimension: wgpu::TextureDimension::D2,
                     mip_level_count: 1,
                     sample_count: 1,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
                     view_formats: &[],
                 },
             );
@@ -155,7 +161,6 @@ pub(crate) fn import_vulkan_external_image(
     }
 }
 
-#[cfg(target_os = "linux")]
 unsafe fn allocate_and_bind_dmabuf_memory(
     vk_device: &ash::Device,
     vk_instance: &ash::Instance,
@@ -220,4 +225,76 @@ unsafe fn allocate_and_bind_dmabuf_memory(
     }
 
     Ok(memory)
+}
+
+/// Construct a [`HostWgpuContext`] whose wgpu `Device` has the Vulkan
+/// extensions required to import a DMABUF as a `wgpu::Texture`.
+///
+/// Specifically, this enables `VK_EXT_image_drm_format_modifier` on top of
+/// wgpu-hal's default extension set (which already includes
+/// `VK_KHR_external_memory_fd` and `VK_EXT_external_memory_dma_buf` when
+/// the driver advertises them). Without this extension, the consumer-side
+/// `vkCreateImage` call in [`import_vulkan_external_image`] fails because the
+/// `DRM_FORMAT_MODIFIER_EXT` tiling mode is gated on the extension being
+/// enabled at `vkCreateDevice` time.
+///
+/// Returns [`InteropError::BackendMismatch`] if `adapter`'s wgpu backend is
+/// not Vulkan, and [`InteropError::Vulkan`] if the physical device does not
+/// advertise `VK_EXT_image_drm_format_modifier` or if `vkCreateDevice` fails.
+pub fn create_dmabuf_host_context(
+    adapter: &wgpu::Adapter,
+    desc: &wgpu::DeviceDescriptor<'_>,
+) -> Result<HostWgpuContext, InteropError> {
+    use wgpu_hal::vulkan::CreateDeviceCallbackArgs;
+
+    let hal_adapter = unsafe {
+        adapter
+            .as_hal::<wgpu::wgc::api::Vulkan>()
+            .ok_or(InteropError::BackendMismatch {
+                expected: "Vulkan",
+                actual: "non-Vulkan",
+            })?
+    };
+
+    let supports_drm_modifier = hal_adapter
+        .physical_device_capabilities()
+        .supports_extension(ash::ext::image_drm_format_modifier::NAME);
+    if !supports_drm_modifier {
+        return Err(InteropError::Vulkan(
+            "physical device does not advertise VK_EXT_image_drm_format_modifier"
+                .into(),
+        ));
+    }
+
+    let callback = Box::new(|args: CreateDeviceCallbackArgs<'_, '_, '_>| {
+        if !args
+            .extensions
+            .contains(&ash::ext::image_drm_format_modifier::NAME)
+        {
+            args.extensions
+                .push(ash::ext::image_drm_format_modifier::NAME);
+        }
+    });
+
+    let open = unsafe {
+        hal_adapter
+            .open_with_callback(
+                desc.required_features,
+                &desc.required_limits,
+                &desc.memory_hints,
+                Some(callback),
+            )
+            .map_err(|err| InteropError::Vulkan(format!("open_with_callback: {}", err)))?
+    };
+    drop(hal_adapter);
+
+    let (device, queue) = unsafe {
+        adapter
+            .create_device_from_hal::<wgpu::wgc::api::Vulkan>(open, desc)
+            .map_err(|err| {
+                InteropError::Vulkan(format!("create_device_from_hal: {}", err))
+            })?
+    };
+
+    Ok(HostWgpuContext::new(device, queue))
 }

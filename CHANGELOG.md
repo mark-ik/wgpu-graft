@@ -77,6 +77,33 @@ All notable changes to this project will be documented here.
   (Linux only). Replaces the prior
   `Unsupported(NativeImportNotYetImplemented)` arm with a real import
   for WPE-class DMABUF producers
+- `vulkan_dmabuf::create_dmabuf_host_context`: constructs a wgpu device
+  with `VK_EXT_image_drm_format_modifier` enabled on top of wgpu-hal's
+  default extension set, then wraps it as a `HostWgpuContext`. Required
+  for the `VulkanExternalImage` import path — wgpu's stock `Device` does
+  not enable the extension, so passing a default-constructed wgpu device
+  to `WgpuTextureImporter` would crash inside ash when the missing
+  function pointer (`get_image_drm_format_modifier_properties_ext`)
+  failed to load
+- `HostWgpuContext::dmabuf_support`: bool field, set automatically by
+  `HostWgpuContext::new` via runtime inspection of
+  `wgpu_hal::vulkan::Device::enabled_device_extensions()`. Drives the
+  capability matrix's `vulkan_external_image` reporting so it now
+  reflects the actual device rather than just the platform
+- `CapabilityMatrix::for_host(backend, dmabuf_support)`: capability shape
+  for a specific host configuration, used by
+  `HostWgpuContext::capabilities`
+- `UnsupportedReason::VulkanDmabufExtensionNotEnabled`: returned by the
+  capability matrix when the Vulkan device lacks
+  `VK_EXT_image_drm_format_modifier`
+- `grafting/tests/dmabuf_roundtrip.rs`: end-to-end integration test for
+  the DMABUF import path. Allocates an exportable `VkImage` with
+  `DRM_FORMAT_MOD_LINEAR`, clears it via `vkCmdClearColorImage`, exports
+  the dmabuf fd, imports through `WgpuTextureImporter`, and asserts the
+  imported texture's pixels match the clear color. Gated `#[ignore]`
+  (run with `cargo test --test dmabuf_roundtrip -- --ignored`) because
+  it requires `VK_EXT_image_drm_format_modifier` which not all CI VMs
+  have
 - `VulkanExternalImage` fields for DMABUF and semaphore handoff:
   `dmabuf_fd`, `dmabuf_offset`, `dmabuf_stride`, `drm_modifier`,
   `wait_semaphore_fd`
@@ -89,6 +116,17 @@ All notable changes to this project will be documented here.
 - `InteropBackend::Dx12` doc string updated to reflect that GL→DX12
   import is now supported on ANGLE-backed surfman via
   `surfman_gl::windows_dx12_shared`
+- `vulkan_dmabuf::import_vulkan_external_image`: imported textures now
+  include `COPY_SRC` (and `TRANSFER_SRC` on the underlying Vulkan image)
+  in addition to `TEXTURE_BINDING`, so consumers can readback / debug
+  imported frames without rebuilding through a render pass. No runtime
+  cost — Vulkan and wgpu both treat extra usage flags as a no-op when
+  unused
+- `CapabilityMatrix::for_backend` on Linux + Vulkan now reports
+  `vulkan_external_image: Unsupported(VulkanDmabufExtensionNotEnabled)`
+  by default (was incorrectly reporting `Supported`). The accurate
+  per-device shape is available via `HostWgpuContext::capabilities` /
+  `CapabilityMatrix::for_host`
 - Cargo features: added `Win32_Security` and `Win32_Graphics_Direct3D11`
   to the `windows` crate dep (required by the new shared-D3D11 path);
   added `sm-angle-default` to surfman (required for ANGLE-specific
@@ -128,6 +166,11 @@ All notable changes to this project will be documented here.
   compatibility with servo-layout
 - `patches/serde_fmt`: local serde_fmt fork removing ambiguous `From` impl
   that breaks stylo's `ToCss` derive on Rust 1.92
+- `[patch.crates-io]` override for `glslopt` (webrender's bundled GLSL
+  optimizer) to git 0.1.14, which adds `#ifndef __once_flag_defined`
+  guards around its C11 threads polyfill. Required to build webrender
+  (and therefore Servo) on glibc 2.34+ — i.e. Fedora 40+, Ubuntu 24.04+ —
+  where `<stdlib.h>` now declares `once_flag` itself
 - `grafting`: public API doc comments on all major types
   (`InteropBackend`, `CapabilityMatrix`, `NativeFrame`, `ImportOptions`, etc.)
 - `grafting`: `#[non_exhaustive]` on `NativeFrame`,

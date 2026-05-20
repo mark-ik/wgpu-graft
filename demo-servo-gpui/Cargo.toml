@@ -7,10 +7,14 @@ description = "Demo embedding Servo in a GPUI application with URL bar and input
 
 [dependencies]
 euclid = "0.22.11"
-# Use default-features = false to avoid wayland/x11 features pulling in
-# blade-graphics → naga v25 which activates codespan-reporting/termcolor.
-# That feature unification would break naga v26 (used by wgpu 26).
-gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "windows-manifest"] }
+# Pinned at 0.2.2 to match upstream gpui's version. The workspace's
+# [patch.crates-io] entry redirects this to glass-hq/gpui — an actively-
+# maintained fork of Zed's gpui that uses gpui_wgpu (wgpu 29) instead of
+# blade, so wayland/x11 features no longer pull in a naga-25 build.
+gpui = { version = "0.2.2", features = ["font-kit", "windows-manifest", "wayland", "x11"] }
+# glass-hq factored platform construction out of gpui itself; gpui_platform
+# wraps the per-OS Platform impls with a single `application()` helper.
+gpui_platform = { git = "https://github.com/glass-hq/gpui", rev = "650aab59d54f4f6f85d42c965831935568ac1162" }
 image = "0.25"
 servo = "0.1.0"
 rustls = "0.23.37"

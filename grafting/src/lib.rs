@@ -11,7 +11,7 @@ mod sync_vulkan;
 mod sync_metal;
 
 #[cfg(target_os = "linux")]
-mod vulkan_dmabuf;
+pub mod vulkan_dmabuf;
 
 #[cfg(target_vendor = "apple")]
 mod metal_texture_ref;
@@ -141,19 +141,32 @@ pub struct HostWgpuContext {
     pub queue: wgpu::Queue,
     /// The graphics backend detected on `device` at construction time.
     pub backend: InteropBackend,
+    /// Whether `device` was constructed with the Vulkan extensions required
+    /// for the DMABUF import path (`VK_EXT_image_drm_format_modifier`,
+    /// `VK_EXT_external_memory_dma_buf`, `VK_KHR_external_memory_fd`).
+    /// Linux-only; always `false` on other platforms or non-Vulkan backends.
+    ///
+    /// Detected automatically by [`HostWgpuContext::new`] by inspecting the
+    /// hal device's enabled extension list. Use
+    /// [`vulkan_dmabuf::create_dmabuf_host_context`] to obtain a context where
+    /// this is `true`.
+    pub dmabuf_support: bool,
 }
 
 impl HostWgpuContext {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue) -> Self {
+        let backend = detect_backend(&device);
+        let dmabuf_support = detect_dmabuf_support(&device, backend);
         Self {
-            backend: detect_backend(&device),
+            backend,
+            dmabuf_support,
             device,
             queue,
         }
     }
 
     pub fn capabilities(&self) -> CapabilityMatrix {
-        CapabilityMatrix::for_backend(self.backend)
+        CapabilityMatrix::for_host(self.backend, self.dmabuf_support)
     }
 }
 
@@ -460,7 +473,23 @@ impl TextureImporter for WgpuTextureImporter {
 }
 
 impl CapabilityMatrix {
+    /// Reports the capability shape assuming a default-constructed wgpu device.
+    ///
+    /// On Linux + Vulkan, `vulkan_external_image` is reported as
+    /// [`UnsupportedReason::VulkanDmabufExtensionNotEnabled`] because the
+    /// default `wgpu::Device` does not enable `VK_EXT_image_drm_format_modifier`.
+    /// Use [`Self::for_host`] (or [`HostWgpuContext::capabilities`]) for an
+    /// accurate matrix that reflects the actual device.
     pub fn for_backend(host_backend: InteropBackend) -> Self {
+        Self::for_host(host_backend, false)
+    }
+
+    /// Reports the capability shape for a specific host configuration.
+    ///
+    /// `dmabuf_support` should be `true` when the wgpu device has the Vulkan
+    /// extensions needed for the DMABUF import path enabled — set
+    /// automatically by [`HostWgpuContext::new`] via runtime detection.
+    pub fn for_host(host_backend: InteropBackend, dmabuf_support: bool) -> Self {
         let gl_framebuffer_source = match host_backend {
             InteropBackend::Vulkan | InteropBackend::Metal | InteropBackend::Dx12 => {
                 CapabilityStatus::Supported
@@ -474,10 +503,17 @@ impl CapabilityMatrix {
             InteropBackend::Vulkan => {
                 #[cfg(target_os = "linux")]
                 {
-                    CapabilityStatus::Supported
+                    if dmabuf_support {
+                        CapabilityStatus::Supported
+                    } else {
+                        CapabilityStatus::Unsupported(
+                            UnsupportedReason::VulkanDmabufExtensionNotEnabled,
+                        )
+                    }
                 }
                 #[cfg(not(target_os = "linux"))]
                 {
+                    let _ = dmabuf_support;
                     // The wgpu Vulkan backend works on Linux/Android/Windows,
                     // but DMABUF imports are Linux-specific.
                     CapabilityStatus::Unsupported(UnsupportedReason::PlatformNotImplemented)
@@ -644,6 +680,35 @@ fn detect_backend(device: &wgpu::Device) -> InteropBackend {
     InteropBackend::Unknown
 }
 
+/// Whether `device` has the Vulkan extensions needed for the DMABUF import
+/// path (`VK_EXT_image_drm_format_modifier`) enabled.
+///
+/// Returns `false` on non-Linux or non-Vulkan backends.
+fn detect_dmabuf_support(
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] device: &wgpu::Device,
+    backend: InteropBackend,
+) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if backend != InteropBackend::Vulkan {
+            return false;
+        }
+        unsafe {
+            let Some(hal_device) = device.as_hal::<wgpu::wgc::api::Vulkan>() else {
+                return false;
+            };
+            hal_device
+                .enabled_device_extensions()
+                .contains(&ash::ext::image_drm_format_modifier::NAME)
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = backend;
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -671,8 +736,22 @@ mod tests {
             CapabilityStatus::Unsupported(UnsupportedReason::HostBackendUnavailable)
         );
 
+        // `for_backend` reports the default-device shape: on Linux + Vulkan
+        // the DMABUF extensions are not enabled, so the import path is
+        // reported as unsupported. `for_host(_, true)` flips it to Supported.
         #[cfg(target_os = "linux")]
-        assert_eq!(vulkan.vulkan_external_image, CapabilityStatus::Supported);
+        {
+            assert_eq!(
+                vulkan.vulkan_external_image,
+                CapabilityStatus::Unsupported(UnsupportedReason::VulkanDmabufExtensionNotEnabled)
+            );
+            let vulkan_with_dmabuf =
+                CapabilityMatrix::for_host(InteropBackend::Vulkan, true);
+            assert_eq!(
+                vulkan_with_dmabuf.vulkan_external_image,
+                CapabilityStatus::Supported
+            );
+        }
         #[cfg(not(target_os = "linux"))]
         assert_eq!(
             vulkan.vulkan_external_image,

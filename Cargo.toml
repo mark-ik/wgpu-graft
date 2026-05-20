@@ -10,15 +10,39 @@ members = [
 ]
 resolver = "3"
 
-# gpui 0.2.2 pins taffy =0.9.0; servo-layout requires ^0.9.2.
-# This patch changes gpui's taffy dep to 0.9.2 so both can coexist.
+# gpui: switched from Zed's published `gpui = 0.2.2` (October 2025, blade
+# renderer pulling naga 25 → naga unification break) to the glass-hq fork
+# which is actively tracked against Zed head and uses wgpu 29 + naga 29
+# directly (no blade dep, no naga conflict). The fork inherits Zed's
+# `taffy = "=0.9.0"` pin though — see the taffy patch below.
 #
 # serde_fmt 1.1.0 adds `impl From<serde_fmt::Error> for std::fmt::Error`.
 # On Rust 1.92 this creates an ambiguous `From` resolution in stylo's
 # `ToCss` derive macro (E0282/E0283). The patch removes that impl.
+#
+# glslopt 0.1.12 (pulled by webrender) ships a bundled C11 threads polyfill
+# whose `typedef pthread_once_t once_flag;` collides with glibc 2.34+'s own
+# `once_flag` in <stdlib.h>. 0.1.14 adds `#ifndef __once_flag_defined`
+# guards. Until webrender bumps glslopt, override here so Servo builds on
+# Fedora 40+ / Ubuntu 24.04+.
+#
+# yeslogic-fontconfig-sys 6.0.0 emits EITHER root-level `extern "C"` blocks
+# OR a runtime-loaded `Fc` struct depending on its `dlopen` feature. xilem's
+# `fontique` enables the feature; `servo-fonts` requires the extern form. The
+# patched copy emits both unconditionally so feature unification can't break
+# either consumer.
+#
+# taffy 0.9.2 source vendored under a 0.9.0 version declaration so gpui's
+# `taffy = "=0.9.0"` exact-version pin is satisfied with newer code. cargo
+# only substitutes this where versions are compatible, so servo-layout's
+# `^0.10` request still resolves to crates.io 0.10.x. Remove when gpui
+# upstream lifts the `=0.9.0` pin.
 [patch.crates-io]
-gpui = { path = "patches/gpui" }
+gpui = { git = "https://github.com/glass-hq/gpui", rev = "650aab59d54f4f6f85d42c965831935568ac1162" }
 serde_fmt = { path = "patches/serde_fmt" }
+glslopt = { git = "https://github.com/jamienicol/glslopt-rs", rev = "68019f02a1437d785408ebc8ce7fd20341fffb8a" }
+yeslogic-fontconfig-sys = { path = "patches/yeslogic-fontconfig-sys" }
+taffy = { path = "patches/taffy-0.9" }
 
 [workspace.package]
 edition = "2024"

@@ -27,7 +27,7 @@ use std::sync::Arc;
 
 use euclid::Scale;
 use gpui::{
-    App, Application, Bounds, Context, FocusHandle, ImageSource, InteractiveElement, IntoElement,
+    App, Bounds, Context, FocusHandle, ImageSource, InteractiveElement, IntoElement,
     KeyDownEvent, KeyUpEvent, MouseButton as GpuiMouseButton, MouseDownEvent,
     MouseMoveEvent as GpuiMouseMoveEvent, MouseUpEvent, ObjectFit, ParentElement, Pixels, Point,
     Render, RenderImage, ScrollDelta, ScrollWheelEvent, Styled, Window, WindowBounds,
@@ -220,9 +220,9 @@ impl Render for ServoView {
                     .track_focus(&self.url_focus)
                     .on_mouse_down(
                         GpuiMouseButton::Left,
-                        cx.listener(|view, _event: &MouseDownEvent, window, _cx| {
+                        cx.listener(|view, _event: &MouseDownEvent, window, cx| {
                             view.url_focused = true;
-                            view.url_focus.focus(window);
+                            view.url_focus.focus(window, cx);
                         }),
                     )
                     .on_key_down(cx.listener(|view, event: &KeyDownEvent, window, cx| {
@@ -241,9 +241,9 @@ impl Render for ServoView {
                 .track_focus(&self.viewport_focus)
                 .on_mouse_down(
                     GpuiMouseButton::Left,
-                    cx.listener(|view, event: &MouseDownEvent, window, _cx| {
+                    cx.listener(|view, event: &MouseDownEvent, window, cx| {
                         view.url_focused = false;
-                        view.viewport_focus.focus(window);
+                        view.viewport_focus.focus(window, cx);
                         view.servo_mouse_down(ServoMouseButton::Left, event.position);
                     }),
                 )
@@ -471,7 +471,7 @@ fn main() {
 
     let initial_url = resolve_initial_url().expect("failed to resolve initial URL");
 
-    Application::new().run(move |cx: &mut App| {
+    gpui_platform::application().run(move |cx: &mut App| {
         let initial_url = initial_url.clone();
         let bounds = Bounds::centered(None, size(px(DEFAULT_WIDTH), px(DEFAULT_HEIGHT)), cx);
         cx.open_window(

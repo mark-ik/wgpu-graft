@@ -1,0 +1,63 @@
+[package]
+edition = "2021"
+rust-version = "1.65"
+name = "taffy"
+# Upstream is 0.9.2. We deliberately declare 0.9.0 so that gpui's
+# `taffy = "=0.9.0"` exact-version pin (inherited from Zed) is satisfied by
+# this newer-code crate. servo-layout's `^0.10` requirement is unaffected —
+# cargo only substitutes this patch where versions are compatible, so 0.10.x
+# still resolves to crates.io. This patch should be removed when gpui
+# upstream lifts the `=0.9.0` pin.
+version = "0.9.0"
+authors = [
+    "Alice Cecile <alice.i.cecile@gmail.com>",
+    "Johnathan Kelley <jkelleyrtp@gmail.com>",
+    "Nico Burns <nico@nicoburns.com>",
+]
+description = "A flexible UI layout library (patched 0.9.2-as-0.9.0 for wgpu-graft)"
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/DioxusLabs/taffy"
+
+[features]
+alloc = ["serde?/alloc"]
+block_layout = []
+calc = []
+content_size = []
+debug = ["std"]
+default = [
+    "std",
+    "taffy_tree",
+    "flexbox",
+    "grid",
+    "block_layout",
+    "calc",
+    "content_size",
+    "detailed_layout_info",
+]
+detailed_layout_info = []
+flexbox = []
+grid = [
+    "alloc",
+    "dep:grid",
+]
+profile = ["std"]
+serde = ["dep:serde"]
+std = [
+    "grid?/std",
+    "serde?/std",
+    "slotmap?/std",
+]
+strict_provenance = []
+taffy_tree = ["dep:slotmap"]
+
+[lib]
+name = "taffy"
+path = "src/lib.rs"
+
+[dependencies]
+arrayvec = { version = "0.7", default-features = false }
+document-features = { version = "0.2.7", optional = true }
+grid = { version = "1.0.0", optional = true, default-features = false }
+serde = { version = "1.0", features = ["serde_derive"], optional = true, default-features = false }
+slotmap = { version = "1.0.6", optional = true, default-features = false }

@@ -1,2 +1,5 @@
 /target
 /.cargo-check-logs
+
+# sem (Ataraxy-Labs) semantic-diff index cache — local, never committed.
+.sem/

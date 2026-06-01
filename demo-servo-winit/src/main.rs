@@ -18,9 +18,11 @@
 //!   cargo run -p demo-servo-winit -- servo.org        # auto-prefixes https://
 //!   cargo run -p demo-servo-winit                     # opens built-in fixture page
 
-use std::{borrow::Cow, path::PathBuf, rc::Rc, sync::Arc};
+use std::{borrow::Cow, rc::Rc, sync::Arc};
 
+use demo_support::{DemoStatus, RenderPath};
 use euclid::Scale;
+use grafting::{HostWgpuContext, InteropBackend};
 use rustls::crypto::aws_lc_rs;
 use servo::{
     DevicePoint, EventLoopWaker, InputEvent, MouseButton as ServoMouseButton, MouseButtonAction,
@@ -30,7 +32,6 @@ use servo::{
 use servo_wgpu_interop_adapter::ServoWgpuInteropAdapter;
 use url::Url;
 use wgpu::CurrentSurfaceTexture;
-use grafting::{HostWgpuContext, InteropBackend};
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
@@ -50,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let event_loop = EventLoop::with_user_event()
         .build()
         .expect("failed to create event loop");
-    let initial_url = resolve_initial_url()?;
+    let initial_url = demo_support::resolve_initial_url(env!("CARGO_MANIFEST_DIR"))?;
     let mut app = App::new(&event_loop, initial_url);
     Ok(event_loop.run_app(&mut app)?)
 }
@@ -71,6 +72,7 @@ struct AppState {
     interop: ServoWgpuInteropAdapter,
     renderer: Renderer,
     gpu_import_failed: bool,
+    render_status: DemoStatus,
     // Input state
     cursor_position: PhysicalPosition<f64>,
     modifiers: ModifiersState,
@@ -112,6 +114,8 @@ impl ApplicationHandler<WakerEvent> for App {
         let interop =
             ServoWgpuInteropAdapter::new(renderer.device.clone(), renderer.queue.clone(), size)
                 .expect("failed to create Servo interop adapter");
+        let render_status = DemoStatus::new(RenderPath::GpuImport)
+            .with_backend(format!("{:?}", renderer.host_backend));
 
         let servo = ServoBuilder::default()
             .event_loop_waker(Box::new(waker.clone()))
@@ -138,6 +142,7 @@ impl ApplicationHandler<WakerEvent> for App {
             interop,
             renderer,
             gpu_import_failed: false,
+                render_status,
             cursor_position: PhysicalPosition::new(0.0, 0.0),
             modifiers: ModifiersState::default(),
             scale_factor,
@@ -279,10 +284,17 @@ impl AppState {
         if !self.gpu_import_failed {
             match self.interop.import_current_frame_default() {
                 Ok(imported) => {
+                    self.render_status.set_frame(
+                        RenderPath::GpuImport,
+                        imported.size.width,
+                        imported.size.height,
+                    );
+                    self.update_status_title();
                     return self.renderer.render_texture(&imported.texture);
                 }
                 Err(e) => {
                     eprintln!("[demo] GPU import unavailable, falling back to CPU readback: {e}");
+                    self.render_status.set_fallback_error(&e);
                     self.gpu_import_failed = true;
                 }
             }
@@ -290,9 +302,18 @@ impl AppState {
 
         // CPU fallback: read pixels from GL, upload via write_texture.
         if let Some(image) = self.interop.rendering_context_handle().read_full_frame() {
+            let (width, height) = image.dimensions();
+            self.render_status
+                .set_frame(RenderPath::CpuReadback, width, height);
+            self.update_status_title();
             self.renderer.upload_frame(&image);
         }
         self.renderer.render_cached()
+    }
+
+    fn update_status_title(&self) {
+        self.window
+            .set_title(&format!("demo-servo-winit — {}", self.render_status.summary()));
     }
 }
 
@@ -721,45 +742,6 @@ impl WebViewDelegate for RedrawDelegate {
             eprintln!("{bt}");
         }
     }
-}
-
-// ── URL resolution ──────────────────────────────────────────────────────────
-
-fn resolve_initial_url() -> Result<Url, String> {
-    if let Some(argument) = std::env::args().nth(1) {
-        return resolve_url_argument(&argument);
-    }
-
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let fixture = manifest_dir.join("fixtures").join("animated.html");
-    Url::from_file_path(&fixture).map_err(|_| {
-        format!(
-            "failed to convert fixture path to file URL: {}",
-            fixture.display()
-        )
-    })
-}
-
-fn resolve_url_argument(argument: &str) -> Result<Url, String> {
-    if let Ok(url) = Url::parse(argument) {
-        return Ok(url);
-    }
-
-    if let Ok(url) = Url::parse(&format!("https://{argument}")) {
-        return Ok(url);
-    }
-
-    let candidate = PathBuf::from(argument);
-    let absolute = if candidate.is_absolute() {
-        candidate
-    } else {
-        std::env::current_dir()
-            .map_err(|error| error.to_string())?
-            .join(candidate)
-    };
-
-    Url::from_file_path(&absolute)
-        .map_err(|_| format!("argument was neither a URL nor a file path: {argument}"))
 }
 
 fn log_startup_diagnostics(

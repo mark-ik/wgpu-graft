@@ -1,5 +1,23 @@
 #![doc = include_str!("../README.md")]
 
+// Alias the feature-selected wgpu / wgpu-hal pair back to the plain crate names
+// so the rest of the crate keeps writing `wgpu::` and `wgpu_hal::` unchanged.
+// `wgpu-29` wins when both features are on (e.g. `--all-features`).
+#[cfg(feature = "wgpu-29")]
+extern crate wgpu_29 as wgpu;
+#[cfg(feature = "wgpu-29")]
+extern crate wgpu_hal_29 as wgpu_hal;
+
+#[cfg(all(feature = "wgpu-28", not(feature = "wgpu-29")))]
+extern crate wgpu_28 as wgpu;
+#[cfg(all(feature = "wgpu-28", not(feature = "wgpu-29")))]
+extern crate wgpu_hal_28 as wgpu_hal;
+
+#[cfg(not(any(feature = "wgpu-28", feature = "wgpu-29")))]
+compile_error!(
+    "grafting needs one wgpu version feature: enable `wgpu-29` (default) or `wgpu-28` to match your host's wgpu"
+);
+
 mod error;
 mod sync;
 

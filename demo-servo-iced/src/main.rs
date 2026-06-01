@@ -22,10 +22,10 @@
 
 mod keyutils;
 
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
+use demo_support::{DemoStatus, RenderPath};
 use euclid::Scale;
 use iced::widget::{column, image, text, text_input};
 use iced::{Element, Event, Length, Size, Subscription, Task, event, keyboard, mouse, window};
@@ -35,7 +35,7 @@ use servo::{
     MouseButtonAction, MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent, Servo,
     ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
 };
-use servo_wgpu_interop_adapter::ServoWgpuRenderingContext;
+use servo_wgpu_interop_adapter::{CapturingRenderingContext, ServoWgpuRenderingContext};
 use url::Url;
 use winit::dpi::PhysicalSize;
 
@@ -57,11 +57,12 @@ struct AppState {
     // Servo
     servo: Servo,
     webview: WebView,
-    render_ctx: Rc<ServoWgpuRenderingContext>,
+    render_ctx: Rc<CapturingRenderingContext>,
 
     // UI
     url_input: String,
     frame: Option<image::Handle>,
+    status: DemoStatus,
     viewport_size: Size,
 
     /// True while an `allocate()` Task is in-flight. Gates new frame reads
@@ -90,7 +91,8 @@ enum Message {
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 fn boot() -> (AppState, Task<Message>) {
-    let initial_url = resolve_initial_url().expect("failed to resolve initial URL");
+    let initial_url = demo_support::resolve_initial_url(env!("CARGO_MANIFEST_DIR"))
+        .expect("failed to resolve initial URL");
 
     let viewport_w = DEFAULT_WIDTH;
     let viewport_h = DEFAULT_HEIGHT - NAV_BAR_HEIGHT;
@@ -99,6 +101,7 @@ fn boot() -> (AppState, Task<Message>) {
         ServoWgpuRenderingContext::new(PhysicalSize::new(viewport_w as u32, viewport_h as u32))
             .expect("failed to create rendering context"),
     );
+    let capture_ctx = Rc::new(CapturingRenderingContext::new(render_ctx));
 
     let servo = ServoBuilder::default()
         .event_loop_waker(Box::new(NoopWaker))
@@ -107,7 +110,7 @@ fn boot() -> (AppState, Task<Message>) {
 
     let delegate = Rc::new(DemoDelegate);
 
-    let webview = WebViewBuilder::new(&servo, render_ctx.clone())
+    let webview = WebViewBuilder::new(&servo, capture_ctx.clone())
         .url(initial_url.clone())
         .hidpi_scale_factor(Scale::new(1.0))
         .delegate(delegate)
@@ -116,9 +119,10 @@ fn boot() -> (AppState, Task<Message>) {
     let state = AppState {
         servo,
         webview,
-        render_ctx,
+        render_ctx: capture_ctx,
         url_input: initial_url.to_string(),
         frame: None,
+        status: DemoStatus::new(RenderPath::CpuReadback),
         viewport_size: Size::new(viewport_w, viewport_h),
         allocating: false,
         _allocation: None,
@@ -142,8 +146,9 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             // cache with >2MB textures that never finish async upload
             // before the Handle changes (which causes flicker).
             if !state.allocating {
-                if let Some(rgba) = state.render_ctx.read_full_frame() {
+                if let Some(rgba) = state.render_ctx.take_frame() {
                     let (w, h) = rgba.dimensions();
+                    state.status.set_frame(RenderPath::CpuReadback, w, h);
                     let handle = image::Handle::from_rgba(w, h, rgba.into_raw());
                     state.allocating = true;
                     return iced::widget::image::allocate(handle).map(Message::FrameAllocated);
@@ -189,7 +194,7 @@ fn handle_event(state: &mut AppState, event: Event) {
             state.viewport_size = Size::new(vp_w, vp_h);
 
             let physical = PhysicalSize::new(vp_w as u32, vp_h as u32);
-            state.render_ctx.resize_viewport(physical);
+            state.render_ctx.resize(physical);
             state.webview.resize(physical);
         }
 
@@ -337,7 +342,7 @@ fn view(state: &AppState) -> Element<'_, Message> {
             .into()
     };
 
-    column![url_bar, content].into()
+    column![url_bar, text(state.status.summary()), content].into()
 }
 
 // ── Subscription ─────────────────────────────────────────────────────────────
@@ -406,37 +411,6 @@ impl WebViewDelegate for DemoDelegate {
             eprintln!("{bt}");
         }
     }
-}
-
-// ── URL resolution ───────────────────────────────────────────────────────────
-
-fn resolve_initial_url() -> Result<Url, String> {
-    if let Some(arg) = std::env::args().nth(1) {
-        return resolve_url_argument(&arg);
-    }
-
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join("animated.html");
-    Url::from_file_path(&fixture).map_err(|_| format!("fixture not found: {}", fixture.display()))
-}
-
-fn resolve_url_argument(argument: &str) -> Result<Url, String> {
-    if let Ok(url) = Url::parse(argument) {
-        return Ok(url);
-    }
-    if let Ok(url) = Url::parse(&format!("https://{argument}")) {
-        return Ok(url);
-    }
-    let candidate = PathBuf::from(argument);
-    let absolute = if candidate.is_absolute() {
-        candidate
-    } else {
-        std::env::current_dir()
-            .map_err(|e| e.to_string())?
-            .join(candidate)
-    };
-    Url::from_file_path(&absolute).map_err(|_| format!("not a valid URL or file path: {argument}"))
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────

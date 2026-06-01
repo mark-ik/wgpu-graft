@@ -6,6 +6,7 @@ license = "MPL-2.0"
 description = "Demo embedding Servo in a Xilem UI via CPU texture readback"
 
 [dependencies]
+demo-support = { path = "../demo-support" }
 euclid = "0.22.11"
 image = "0.25"
 servo = "0.1.0"

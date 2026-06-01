@@ -32,7 +32,7 @@ On startup, the demo logs the URL, host backend, and capability matrix to stdout
 ## Platform notes
 
 - **Linux / macOS**: GPU import path works on compatible drivers. Falls back to CPU readback if GL extensions are missing.
-- **Windows**: CPU readback only. Servo forces ANGLE (D3D-backed), so GPU import is not available until Servo supports native Vulkan/DX12 rendering.
+- **Windows**: GPU import is attempted first. The demo uses DX12 by default for the ANGLE D3D11 → DX12 shared-texture path; set `WGPU_BACKEND=vulkan` to exercise the ANGLE D3D11 → Vulkan path. CPU readback remains the fallback if sharing is unavailable.
 - **Windows without nasm**: set `AWS_LC_SYS_NO_ASM=1` before building.
 
 ## License

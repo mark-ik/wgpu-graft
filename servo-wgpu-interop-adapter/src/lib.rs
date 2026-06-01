@@ -1,5 +1,15 @@
 #![doc = include_str!("../README.md")]
 
+// Alias the feature-selected wgpu back to `wgpu` crate-wide, matching grafting.
+#[cfg(feature = "wgpu-29")]
+extern crate wgpu_29 as wgpu;
+#[cfg(all(feature = "wgpu-28", not(feature = "wgpu-29")))]
+extern crate wgpu_28 as wgpu;
+#[cfg(not(any(feature = "wgpu-28", feature = "wgpu-29")))]
+compile_error!(
+    "servo-wgpu-interop-adapter needs one wgpu version feature: `wgpu-29` (default) or `wgpu-28`"
+);
+
 use std::{cell::RefCell, rc::Rc};
 
 use euclid::default::Size2D;

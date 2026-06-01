@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "demo-support",
     "demo-raw-gl",
     "demo-servo-gpui",
     "demo-servo-iced",

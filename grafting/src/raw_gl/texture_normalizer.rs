@@ -87,9 +87,16 @@ impl ImportedTextureNormalizer {
             address_mode_w: wgpu::AddressMode::ClampToEdge,
         });
 
+        // wgpu 29 wraps bind group layout entries in `Option`; wgpu 28 takes
+        // bare references. Only difference in this descriptor between the two.
+        #[cfg(feature = "wgpu-29")]
+        let bind_group_layouts: &[Option<&wgpu::BindGroupLayout>] = &[Some(&bind_group_layout)];
+        #[cfg(all(feature = "wgpu-28", not(feature = "wgpu-29")))]
+        let bind_group_layouts: &[&wgpu::BindGroupLayout] = &[&bind_group_layout];
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("texture-normalize-pipeline-layout"),
-            bind_group_layouts: &[Some(&bind_group_layout)],
+            bind_group_layouts,
             immediate_size: 0,
         });
 

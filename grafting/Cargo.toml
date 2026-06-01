@@ -7,13 +7,25 @@ repository = "https://github.com/mark-ik/wgpu-graft"
 description = "Native texture interop helpers for importing offscreen producer frames into host-owned wgpu textures"
 
 [features]
-default = ["surfman"]
+default = ["wgpu-29", "surfman"]
+# Pick exactly one wgpu version to build against; it must match the host
+# application's wgpu so that imported textures share a device. `wgpu-29` takes
+# precedence if both are enabled (e.g. under `--all-features`); see lib.rs.
+wgpu-29 = ["dep:wgpu_29", "dep:wgpu_hal_29"]
+wgpu-28 = ["dep:wgpu_28", "dep:wgpu_hal_28"]
 surfman = ["dep:euclid", "dep:gleam", "dep:image", "dep:surfman"]
 
 [dependencies]
 thiserror = "2.0.17"
-wgpu = { version = "29.0.1", features = ["metal"] }
-wgpu-hal = "29.0.1"
+# wgpu + wgpu-hal are carried at two majors behind cargo features so a consumer
+# can build grafting against whichever wgpu their host already uses, instead of
+# patching the host onto ours. Renamed via `package` so both can coexist as
+# optional deps; lib.rs aliases the selected pair back to `wgpu` / `wgpu_hal`
+# crate-wide via `extern crate`.
+wgpu_29 = { package = "wgpu", version = "29.0.1", features = ["metal"], optional = true }
+wgpu_hal_29 = { package = "wgpu-hal", version = "29.0.1", optional = true }
+wgpu_28 = { package = "wgpu", version = "28.0.0", features = ["metal"], optional = true }
+wgpu_hal_28 = { package = "wgpu-hal", version = "28.0.0", optional = true }
 euclid = { version = "0.22.11", optional = true }
 gleam = { version = "0.15.1", optional = true }
 glow = "0.16.0"

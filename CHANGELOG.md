@@ -189,9 +189,10 @@ All notable changes to this project will be documented here.
   forwarding including custom key mapping
 - `demo-servo-winit`: added mouse, scroll, and keyboard input forwarding to
   Servo; pages are now fully interactive (links, scrolling, text input)
-- `rust-toolchain.toml`: pin workspace to Rust 1.92.0 (required by wgpu 28)
-- `patches/gpui`: local gpui fork with taffy `=0.9.0` → `0.9.2` for
-  compatibility with servo-layout
+- `rust-toolchain.toml`: pin workspace to Rust 1.92.0 (required by wgpu 29)
+- `patches/glass-gpui` and `patches/taffy-0.9`: local GPUI compatibility
+  patches so the demo can use the wgpu-based glass-hq GPUI fork while
+  satisfying GPUI's exact taffy 0.9.0 dependency
 - `patches/serde_fmt`: local serde_fmt fork removing ambiguous `From` impl
   that breaks stylo's `ToCss` derive on Rust 1.92
 - `[patch.crates-io]` override for `glslopt` (webrender's bundled GLSL

@@ -7,7 +7,11 @@ repository = "https://github.com/mark-ik/wgpu-graft"
 description = "Servo-specific offscreen rendering adapter built on grafting"
 
 [features]
-default = []
+default = ["wgpu-29"]
+# Select the wgpu version to match the host; forwarded to grafting.
+# `wgpu-29` takes precedence if both are enabled.
+wgpu-29 = ["dep:wgpu_29", "grafting/wgpu-29"]
+wgpu-28 = ["dep:wgpu_28", "grafting/wgpu-28"]
 servo = ["dep:servo"]
 
 [dependencies]
@@ -19,6 +23,7 @@ rustls = "0.23.37"
 surfman = { version = "0.11.0", features = ["chains"] }
 dpi = "0.1.2"
 winit = "0.30.13"
-wgpu = { version = "29.0.1", features = ["metal"] }
-grafting = { path = "../grafting", version = "0.3.0" }
+wgpu_29 = { package = "wgpu", version = "29.0.1", features = ["metal"], optional = true }
+wgpu_28 = { package = "wgpu", version = "28.0.0", features = ["metal"], optional = true }
+grafting = { path = "../grafting", version = "0.3.0", default-features = false, features = ["surfman"] }
 servo = { version = "0.1.0", optional = true }

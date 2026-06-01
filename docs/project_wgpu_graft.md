@@ -1,6 +1,6 @@
 ---
 name: wgpu-graft project context
-description: Workspace for embedding GL-rendered content (Servo via surfman) into host wgpu textures. Extracted from Slint, renamed from wgpu-gui-bridge 2026-05-05. Two lib crates plus Servo demos. Linux/Apple import paths implemented, Windows DX12 deferred. Architecturally complementary to WebRender wgpu backend work.
+description: Workspace for embedding GL-rendered content (Servo via surfman) into host wgpu textures. Extracted from Slint, renamed from wgpu-gui-bridge 2026-05-05. Two lib crates plus Servo demos. Linux/Apple import paths implemented, Windows ANGLE D3D11 import implemented for DX12 and Vulkan hosts. Architecturally complementary to WebRender wgpu backend work.
 type: project
 ---
 
@@ -17,6 +17,6 @@ type: project
 **Platform paths:**
 - Linux: GL FBO → Vulkan external memory FD → wgpu texture
 - Apple: IOSurface → Metal texture → BGRA→RGBA normalization → wgpu texture
-- Windows: API stubbed (`Dx12SharedTexture`), runtime not implemented
+- Windows: ANGLE D3D11 → DX12 shared texture by default, with ANGLE D3D11 → Vulkan and non-ANGLE `GL_EXT_memory_object_win32` paths available where supported
 
 **wgpu version:** 29.0.1. Uses `wgpu-hal` for `create_texture_from_hal` (both Vulkan and Metal paths).

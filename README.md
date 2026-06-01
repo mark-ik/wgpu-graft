@@ -29,7 +29,7 @@ Each demo embeds Servo in a different Rust GUI framework to show that the approa
 
 **GPU import (zero-copy):** Servo renders to a GL framebuffer, which is imported directly into a host `wgpu` texture via platform-specific interop (Vulkan external memory, Metal IOSurface). Fastest path, but requires compatible GL drivers.
 
-**CPU readback (fallback):** Servo renders offscreen, pixels are read back to CPU via `read_full_frame()`, then uploaded to the host's image widget. Works everywhere but adds a GPU→CPU→GPU round-trip per frame. This is the path used by the xilem, iced, and GPUI demos today. On Windows, this is currently the only path because Servo forces ANGLE, whose D3D textures can't be shared with wgpu's Vulkan/DX12 textures.
+**CPU readback (fallback):** Servo renders offscreen, pixels are read back to CPU via `read_full_frame()`, then uploaded to the host's image widget. Works everywhere but adds a GPU→CPU→GPU round-trip per frame. This is the path used by the xilem, iced, and GPUI demos today; the winit demo tries GPU import first and falls back to CPU readback if the host driver/backend cannot import the frame.
 
 ## Quick start
 
@@ -75,7 +75,7 @@ once Servo ships a newer stable, non-LTS release beyond the current LTS line.
 | --- | --- | --- | --- |
 | Linux | GL FBO → Vulkan image → wgpu | Yes | Primary development target |
 | macOS | IOSurface → Metal → wgpu | Yes | |
-| Windows | Builds, blocked at runtime | Yes | Servo forces ANGLE (D3D); ANGLE textures can't be shared with wgpu's Vulkan/DX12. CPU readback works. |
+| Windows | ANGLE D3D11 → DX12 shared texture by default; `WGPU_BACKEND=vulkan` uses the ANGLE D3D11 → Vulkan path | Yes | The winit demo exercises GPU import first and falls back to CPU readback if sharing is unavailable. |
 
 ## Prerequisites
 
@@ -99,12 +99,14 @@ See [`demo-servo-iced/src/main.rs`](demo-servo-iced/src/main.rs) for a clean exa
 
 ## Workspace patches
 
-The `patches/` directory contains local forks of two crates needed to resolve dependency conflicts:
+The `patches/` directory contains local forks and compatibility patches needed to keep Servo, wgpu 29, and the GUI demos building together:
 
-- **`patches/gpui`**: Changes gpui's `taffy` dependency from `=0.9.0` to `0.9.2` so it coexists with servo-layout's `taffy ^0.9.2`.
+- **`patches/glass-gpui`**: Vendored glass-hq GPUI fork with local Linux build fixes. The demo depends on published `gpui = 0.2.2`, and Cargo redirects it here so GPUI uses its wgpu-based renderer instead of the older blade/naga stack.
+- **`patches/taffy-0.9`**: Vendored taffy 0.9.2 source under a 0.9.0 version declaration so GPUI's exact `=0.9.0` pin can coexist with Servo's layout dependencies.
 - **`patches/serde_fmt`**: Removes an `impl From<serde_fmt::Error> for std::fmt::Error` that creates ambiguous type resolution in stylo's `ToCss` derive macro on Rust 1.92.
+- **`patches/yeslogic-fontconfig-sys`** and the `glslopt` git override: Linux build compatibility fixes for the current Servo dependency stack.
 
-These patches are only needed by `demo-servo-gpui`. The other demos and the core crates don't require them.
+The GPUI-related patches are only needed by `demo-servo-gpui`; the Servo build fixes are workspace-wide because Servo is shared by all Servo demos.
 
 ## License
 

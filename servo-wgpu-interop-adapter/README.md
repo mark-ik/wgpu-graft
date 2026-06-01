@@ -10,7 +10,7 @@ This crate bridges Servo's rendering context to the host application. It provide
 ## Which path to use
 
 - **CPU readback** (`ServoWgpuRenderingContext::read_full_frame()`): Works on all platforms. Simpler to integrate — just display the returned image in your framework's image widget. Adds a GPU→CPU→GPU round-trip per frame.
-- **GPU import** (`ServoWgpuInteropAdapter`): Zero-copy, but requires compatible GL drivers and a Vulkan/Metal wgpu backend. Currently blocked on Windows because Servo forces ANGLE (D3D-backed GL), whose textures can't be shared with wgpu.
+- **GPU import** (`ServoWgpuInteropAdapter`): Zero-copy, but requires compatible native sharing support between Servo's GL producer and the host wgpu backend. Linux uses Vulkan external memory, Apple uses IOSurface/Metal, and Windows supports Servo's ANGLE D3D11 output through DX12 shared textures by default or an ANGLE D3D11 → Vulkan path when `WGPU_BACKEND=vulkan` is selected.
 
 The CPU readback demos ([xilem](../demo-servo-xilem/), [iced](../demo-servo-iced/), [gpui](../demo-servo-gpui/)) use `read_full_frame()`. The [winit demo](../demo-servo-winit/) tries GPU import first and falls back to CPU readback.
 

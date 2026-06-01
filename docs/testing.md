@@ -22,6 +22,9 @@ cargo run -p demo-servo-xilem
 cargo run -p demo-servo-iced
 cargo run -p demo-servo-gpui
 cargo run -p demo-raw-gl
+
+# Bounded GUI smoke run on Windows / PowerShell
+pwsh -File scripts/smoke-demo.ps1 -Package demo-servo-winit -Seconds 15
 ```
 
 On Windows without `nasm`, prefix with `AWS_LC_SYS_NO_ASM=1`. In PowerShell:
@@ -92,4 +95,4 @@ Each Servo demo includes fixtures in its `fixtures/` directory:
 | --- | --- | --- | --- |
 | Linux | Works on compatible drivers | Works | Works |
 | macOS | Works | Works | Works |
-| Windows | Blocked (Servo forces ANGLE) | Works | Works (with compatible GL drivers) |
+| Windows | Works on compatible DX12/Vulkan drivers through ANGLE D3D11 sharing; falls back to CPU readback | Works | Works (with compatible GL drivers) |

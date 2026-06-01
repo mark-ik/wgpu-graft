@@ -15,10 +15,10 @@
 
 mod keyutils;
 
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
+use demo_support::{DemoStatus, RenderPath};
 use euclid::Scale;
 use masonry::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 use masonry::theme::default_property_set;
@@ -27,10 +27,10 @@ use rustls::crypto::aws_lc_rs;
 use servo::EventLoopWaker;
 use servo::{
     DevicePoint, InputEvent, MouseButton as ServoMouseButton, MouseButtonAction, MouseButtonEvent,
-    MouseLeftViewportEvent, MouseMoveEvent, RenderingContext, Servo, ServoBuilder, WebView,
-    WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
+    MouseLeftViewportEvent, MouseMoveEvent, Servo, ServoBuilder, WebView, WebViewBuilder,
+    WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
 };
-use servo_wgpu_interop_adapter::ServoWgpuRenderingContext;
+use servo_wgpu_interop_adapter::{CapturingRenderingContext, ServoWgpuRenderingContext};
 use tokio::sync::watch;
 use url::Url;
 use winit::application::ApplicationHandler;
@@ -53,6 +53,7 @@ struct AppState {
     nav_input: String,
     /// The last successfully read frame from Servo, or None before first paint.
     current_image: Option<ImageData>,
+    status: DemoStatus,
 }
 
 // ── View logic ────────────────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ fn app_logic(
     // we clone it inside the closure body — the move-captured `rx` stays alive
     // for subsequent (no-op) calls while the async task owns the clone.
     fork(
-        flex_col((nav_bar, content.flex(1.0))),
+        flex_col((nav_bar, label(state.status.summary()), content.flex(1.0))),
         task_raw(
             move |proxy| {
                 let mut rx = image_rx.clone(); // borrow, then clone — Fn-safe
@@ -116,6 +117,9 @@ fn app_logic(
                 }
             },
             |state: &mut AppState, img: ImageData| {
+                state
+                    .status
+                    .set_frame(RenderPath::CpuReadback, img.width, img.height);
                 state.current_image = Some(img);
             },
         ),
@@ -127,7 +131,7 @@ fn app_logic(
 struct ServoState {
     servo: Servo,
     webview: WebView,
-    render_ctx: Rc<ServoWgpuRenderingContext>,
+    render_ctx: Rc<CapturingRenderingContext>,
 }
 
 impl ServoState {
@@ -135,13 +139,14 @@ impl ServoState {
         let render_ctx = Rc::new(
             ServoWgpuRenderingContext::new(size).map_err(|e| format!("surfman error: {e:?}"))?,
         );
+        let capture_ctx = Rc::new(CapturingRenderingContext::new(render_ctx));
 
         let servo = ServoBuilder::default()
             .event_loop_waker(Box::new(NoopWaker))
             .build();
         servo.setup_logging();
 
-        let webview = WebViewBuilder::new(&servo, render_ctx.clone())
+        let webview = WebViewBuilder::new(&servo, capture_ctx.clone())
             .url(initial_url)
             .hidpi_scale_factor(Scale::new(1.0))
             .delegate(Rc::new(DemoDelegate))
@@ -150,7 +155,7 @@ impl ServoState {
         Ok(Self {
             servo,
             webview,
-            render_ctx,
+            render_ctx: capture_ctx,
         })
     }
 }
@@ -410,8 +415,7 @@ impl ApplicationHandler<MasonryUserEvent> for ServoXilemApp {
             ss.servo.spin_event_loop();
             ss.webview.paint();
 
-            // CPU readback from the swap chain's back buffer (previous frame, 1-frame delay).
-            if let Some(rgba) = ss.render_ctx.read_full_frame() {
+            if let Some(rgba) = ss.render_ctx.take_frame() {
                 let (width, height) = rgba.dimensions();
                 let image_data = ImageData {
                     data: Blob::new(Arc::new(rgba.into_raw())),
@@ -465,7 +469,8 @@ fn main() -> Result<(), EventLoopError> {
         .install_default()
         .expect("failed to install rustls crypto provider");
 
-    let initial_url = resolve_initial_url().expect("failed to resolve initial URL");
+    let initial_url = demo_support::resolve_initial_url(env!("CARGO_MANIFEST_DIR"))
+        .expect("failed to resolve initial URL");
 
     // Watch channel: about_to_wait sends frames; task_raw forwards them to AppState.
     let (image_tx, image_rx) = watch::channel(None::<ImageData>);
@@ -475,6 +480,7 @@ fn main() -> Result<(), EventLoopError> {
     let app_state = AppState {
         nav_input: initial_url.to_string(),
         current_image: None,
+        status: DemoStatus::new(RenderPath::CpuReadback),
     };
 
     let window_options =
@@ -517,27 +523,3 @@ fn main() -> Result<(), EventLoopError> {
     event_loop.run_app(&mut app)
 }
 
-// ── URL resolution ────────────────────────────────────────────────────────────
-
-fn resolve_initial_url() -> Result<Url, String> {
-    if let Some(arg) = std::env::args().nth(1) {
-        if let Ok(url) = Url::parse(&arg) {
-            return Ok(url);
-        }
-        let path = std::path::Path::new(&arg);
-        let abs = if path.is_absolute() {
-            path.to_owned()
-        } else {
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join(path)
-        };
-        return Url::from_file_path(&abs)
-            .map_err(|_| format!("not a valid URL or file path: {arg}"));
-    }
-
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join("animated.html");
-    Url::from_file_path(&fixture).map_err(|_| format!("fixture not found: {}", fixture.display()))
-}

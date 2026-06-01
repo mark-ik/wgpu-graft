@@ -21,10 +21,10 @@
 
 mod keyutils;
 
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use demo_support::{DemoStatus, RenderPath};
 use euclid::Scale;
 use gpui::{
     App, Bounds, Context, FocusHandle, ImageSource, InteractiveElement, IntoElement,
@@ -40,7 +40,7 @@ use servo::{
     MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent as ServoMouseMoveEvent, Servo,
     ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
 };
-use servo_wgpu_interop_adapter::ServoWgpuRenderingContext;
+use servo_wgpu_interop_adapter::{CapturingRenderingContext, ServoWgpuRenderingContext};
 use smallvec::SmallVec;
 use url::Url;
 use winit::dpi::PhysicalSize;
@@ -59,10 +59,11 @@ struct ServoView {
     // Servo (main-thread only, !Send)
     servo: Servo,
     webview: WebView,
-    render_ctx: Rc<ServoWgpuRenderingContext>,
+    render_ctx: Rc<CapturingRenderingContext>,
 
     // Latest rendered frame as BGRA RenderImage
     frame: Option<Arc<RenderImage>>,
+    status: DemoStatus,
 
     // URL bar state
     url_text: String,
@@ -84,13 +85,14 @@ impl ServoView {
             ))
             .expect("failed to create ServoWgpuRenderingContext"),
         );
+        let capture_ctx = Rc::new(CapturingRenderingContext::new(render_ctx));
 
         let servo = ServoBuilder::default()
             .event_loop_waker(Box::new(NoopWaker))
             .build();
         servo.setup_logging();
 
-        let webview = WebViewBuilder::new(&servo, render_ctx.clone())
+        let webview = WebViewBuilder::new(&servo, capture_ctx.clone())
             .url(initial_url.clone())
             .hidpi_scale_factor(Scale::new(1.0))
             .delegate(Rc::new(DemoDelegate))
@@ -99,8 +101,9 @@ impl ServoView {
         Self {
             servo,
             webview,
-            render_ctx,
+            render_ctx: capture_ctx,
             frame: None,
+            status: DemoStatus::new(RenderPath::CpuReadback),
             url_text: initial_url.to_string(),
             url_focused: false,
             url_focus: cx.focus_handle(),
@@ -164,8 +167,9 @@ impl Render for ServoView {
         self.servo.spin_event_loop();
         self.webview.paint();
 
-        if let Some(rgba) = self.render_ctx.read_full_frame() {
+        if let Some(rgba) = self.render_ctx.take_frame() {
             let (w, h) = rgba.dimensions();
+            self.status.set_frame(RenderPath::CpuReadback, w, h);
             let mut raw = rgba.into_raw();
             // Servo outputs RGBA; GPUI expects BGRA — swap channels 0 and 2.
             for px in raw.chunks_exact_mut(4) {
@@ -363,6 +367,16 @@ impl Render for ServoView {
                 }),
             )
             .child(url_bar)
+            .child(
+                div()
+                    .w_full()
+                    .px_3()
+                    .py_1()
+                    .bg(rgb(0x252525))
+                    .text_color(rgb(0xb7b7b7))
+                    .text_xs()
+                    .child(self.status.summary()),
+            )
             .child(viewport)
     }
 }
@@ -431,37 +445,6 @@ impl WebViewDelegate for DemoDelegate {
     }
 }
 
-// ── URL resolution ────────────────────────────────────────────────────────────
-
-fn resolve_initial_url() -> Result<Url, String> {
-    if let Some(arg) = std::env::args().nth(1) {
-        return resolve_url_argument(&arg);
-    }
-
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join("animated.html");
-    Url::from_file_path(&fixture).map_err(|_| format!("fixture not found: {}", fixture.display()))
-}
-
-fn resolve_url_argument(argument: &str) -> Result<Url, String> {
-    if let Ok(url) = Url::parse(argument) {
-        return Ok(url);
-    }
-    if let Ok(url) = Url::parse(&format!("https://{argument}")) {
-        return Ok(url);
-    }
-    let candidate = PathBuf::from(argument);
-    let absolute = if candidate.is_absolute() {
-        candidate
-    } else {
-        std::env::current_dir()
-            .map_err(|e| e.to_string())?
-            .join(candidate)
-    };
-    Url::from_file_path(&absolute).map_err(|_| format!("not a valid URL or file path: {argument}"))
-}
-
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 fn main() {
@@ -469,7 +452,8 @@ fn main() {
         .install_default()
         .expect("failed to install rustls crypto provider");
 
-    let initial_url = resolve_initial_url().expect("failed to resolve initial URL");
+    let initial_url = demo_support::resolve_initial_url(env!("CARGO_MANIFEST_DIR"))
+        .expect("failed to resolve initial URL");
 
     gpui_platform::application().run(move |cx: &mut App| {
         let initial_url = initial_url.clone();

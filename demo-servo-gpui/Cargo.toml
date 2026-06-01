@@ -20,7 +20,7 @@ gpui = { version = "0.2.2", features = ["font-kit", "windows-manifest", "wayland
 # real window backends are compiled in.
 gpui_platform = { path = "../patches/glass-gpui/crates/gpui_platform", features = ["wayland", "x11"] }
 image = "0.25"
-servo = "0.1.0"
+servo = "0.1.1"
 rustls = "0.23.37"
 servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", features = ["servo"] }
 smallvec = "1"

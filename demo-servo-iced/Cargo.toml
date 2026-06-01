@@ -9,7 +9,7 @@ description = "Demo embedding Servo in an iced UI with URL bar and input forward
 demo-support = { path = "../demo-support" }
 euclid = "0.22.11"
 iced = { version = "0.14", features = ["image", "tokio"] }
-servo = "0.1.0"
+servo = "0.1.1"
 rustls = "0.23.37"
 servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", features = ["servo"] }
 url = "2.5.7"

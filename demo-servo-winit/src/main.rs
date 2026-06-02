@@ -179,11 +179,20 @@ impl ApplicationHandler<WakerEvent> for App {
 
             WindowEvent::Resized(new_size) => {
                 state.renderer.resize(new_size);
-                state
-                    .interop
-                    .rendering_context_handle()
-                    .resize_viewport(new_size);
+                // `webview.resize()` is the sole driver of the Servo-side resize:
+                // it resizes the rendering context AND updates the webview rect +
+                // document view + triggers a repaint. Do NOT also call
+                // `resize_viewport()` here — pre-setting the rendering-context
+                // size makes Servo's `resize_rendering_context` early-return
+                // before it updates the webview rect, which pins the page to the
+                // startup size and leaves unpainted margins on a larger window.
                 state.webview.resize(new_size);
+                // On Windows the OS runs a modal message loop during a live
+                // resize-drag that defers RedrawRequested, so render synchronously
+                // here to present at the new size during the drag.
+                if let Err(error) = state.render_frame() {
+                    eprintln!("render failed during resize: {error}");
+                }
                 state.window.request_redraw();
             }
 

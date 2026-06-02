@@ -1,0 +1,31 @@
+[package]
+name = "demo-servo-slint"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+description = "Demo embedding Servo in a Slint UI, zero-copy via slint's unstable-wgpu Image::try_from"
+
+[dependencies]
+demo-support = { path = "../demo-support" }
+euclid = "0.22.11"
+# Slint 1.16 with the wgpu-28 integration (Image::try_from(wgpu::Texture)) and
+# the femtovg-on-wgpu renderer. The crates.io release is on wgpu 28; slint
+# master is on wgpu 29. grafting/adapter are built with wgpu-28 to match, so the
+# imported texture is slint's own wgpu::Texture type (Cargo unifies them).
+slint = { version = "1.16", features = [
+    "unstable-winit-030",
+    "unstable-wgpu-28",
+    "renderer-femtovg-wgpu",
+] }
+servo = { git = "https://github.com/servo/servo", branch = "release/v0.2" }
+rustls = "0.23.37"
+grafting = { path = "../grafting", default-features = false, features = [
+    "wgpu-28",
+    "surfman",
+] }
+servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", default-features = false, features = [
+    "wgpu-28",
+    "servo",
+] }
+url = "2.5.7"
+winit = "0.30.12"

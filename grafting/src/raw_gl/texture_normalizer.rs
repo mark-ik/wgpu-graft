@@ -155,7 +155,13 @@ impl ImportedTextureNormalizer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            // COPY_SRC lets consumers that re-upload the normalized texture into
+            // their own atlas use it (e.g. vello's `register_texture`, which
+            // requires COPY_SRC). TEXTURE_BINDING for direct sampling,
+            // RENDER_ATTACHMENT because the normalize pass renders into it.
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
 

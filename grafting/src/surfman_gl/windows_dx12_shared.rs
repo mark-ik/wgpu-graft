@@ -28,7 +28,7 @@ use dpi::PhysicalSize;
 use euclid::default::Size2D;
 use glow::HasContext;
 
-use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL};
+use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_RESOURCE_MISC_SHARED,
     D3D11_RESOURCE_MISC_SHARED_NTHANDLE, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, ID3D11Device,
@@ -75,6 +75,46 @@ impl AngleDx12SharedCache {
 }
 
 impl Default for AngleDx12SharedCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Export-only size-dependent state for the shared-handle path.
+///
+/// Unlike [`SizeDependentState`], it holds no host wgpu texture — the consumer
+/// opens the NT handle on its *own* device. The handle is created once per size
+/// and reused across frames; [`Drop`] closes it when the size changes (the slot
+/// is replaced) or the cache is dropped.
+struct ExportState {
+    d3d11_shared_texture: ID3D11Texture2D,
+    nt_handle: HANDLE,
+    size: PhysicalSize<u32>,
+}
+
+impl Drop for ExportState {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = CloseHandle(self.nt_handle);
+        }
+    }
+}
+
+/// Cross-frame cache for the shared-handle *export* path
+/// ([`export_current_frame`]). Owned by `SurfmanFrameProducer`.
+pub(super) struct AngleDx12ExportCache {
+    state: RefCell<Option<ExportState>>,
+}
+
+impl AngleDx12ExportCache {
+    pub(super) fn new() -> Self {
+        Self {
+            state: RefCell::new(None),
+        }
+    }
+}
+
+impl Default for AngleDx12ExportCache {
     fn default() -> Self {
         Self::new()
     }
@@ -127,11 +167,41 @@ pub(super) fn import_current_frame(
     let cache_borrow = cache.state.borrow();
     let state = cache_borrow.as_ref().expect("just initialized");
 
-    // Wrap the cached D3D11 texture as a transient EGL pbuffer for this
-    // frame, blit the source FBO into it, then destroy the transient.
+    // Wrap the cached D3D11 texture as a transient EGL pbuffer, blit the source
+    // FBO into it, then tear the transient down.
+    blit_source_into_d3d11_texture(
+        surfman_device,
+        surfman_context,
+        glow_gl,
+        &state.d3d11_shared_texture,
+        source_fbo,
+        size,
+        false,
+    )?;
+
+    Ok(state.wgpu_texture.clone())
+}
+
+/// Wrap `d3d11_texture` as a transient ANGLE EGL pbuffer, blit `source_fbo` into
+/// it, and destroy the transient. The D3D11 texture (and any wgpu/D3D12 resource
+/// aliasing it) keeps the rendered content.
+///
+/// When `finish` is set, issues a `glFinish` after the blit so a consumer on a
+/// *different* device (e.g. the shared-handle export path) reads completed work
+/// rather than racing the in-flight GL blit. The same-device import path passes
+/// `false` (the importer's normalizer blit serialises the read instead).
+fn blit_source_into_d3d11_texture(
+    surfman_device: &surfman::Device,
+    surfman_context: &mut surfman::Context,
+    glow_gl: &glow::Context,
+    d3d11_texture: &ID3D11Texture2D,
+    source_fbo: u32,
+    size: PhysicalSize<u32>,
+    finish: bool,
+) -> Result<(), InteropError> {
     let surface_texture = unsafe {
         let texture_size = Size2D::new(size.width as i32, size.height as i32);
-        let raw = state.d3d11_shared_texture.clone().into_raw();
+        let raw = d3d11_texture.clone().into_raw();
         let texture_comptr = wio::com::ComPtr::from_raw(raw as *mut _);
 
         surfman_device
@@ -148,9 +218,12 @@ pub(super) fn import_current_frame(
         .ok_or_else(|| InteropError::OpenGl("ANGLE returned no GL texture for pbuffer".into()))?;
 
     blit_fbo_to_gl_texture(glow_gl, source_fbo, gl_texture, size)?;
+    if finish {
+        unsafe { glow_gl.finish() };
+    }
 
-    // Tear down the transient pbuffer. The underlying D3D11 texture stays
-    // alive via the cache's COM reference.
+    // Tear down the transient pbuffer. The underlying D3D11 texture stays alive
+    // via the caller's COM reference.
     let mut inner_surface = surfman_device
         .destroy_surface_texture(surfman_context, surface_texture)
         .map_err(|(err, _)| {
@@ -160,7 +233,71 @@ pub(super) fn import_current_frame(
         .destroy_surface(surfman_context, &mut inner_surface)
         .map_err(|err| InteropError::Surfman(format!("destroy_surface failed: {err:?}")))?;
 
-    Ok(state.wgpu_texture.clone())
+    Ok(())
+}
+
+/// Export the current ANGLE EGL frame as a cross-device D3D12 shared texture.
+///
+/// Allocates (or reuses, per size) a D3D11 shared texture on ANGLE's D3D11
+/// device, blits the source FBO into it with a trailing `glFinish`, and returns
+/// a [`crate::Dx12SharedTexture`] descriptor (NT handle + size + format). The
+/// consumer opens the handle on its *own* wgpu DX12 device via
+/// [`crate::import_dx12_shared_texture`].
+///
+/// Use this when the consumer (a UI framework that owns its wgpu device and only
+/// exposes it on the render thread) cannot run the same-device import path. The
+/// returned content is **bottom-left** origin `Rgba8Unorm` (the GL blit is not
+/// flipped); the consumer is responsible for the Y-flip.
+pub(super) fn export_current_frame(
+    cache: &AngleDx12ExportCache,
+    surfman_device: &surfman::Device,
+    surfman_context: &mut surfman::Context,
+    glow_gl: &glow::Context,
+    source_fbo: u32,
+    size: PhysicalSize<u32>,
+    generation: u64,
+) -> Result<crate::Dx12SharedTexture, InteropError> {
+    // (Re)create the size-dependent state (and its NT handle) when the size
+    // changes. Replacing the slot drops the old ExportState, closing its handle.
+    let needs_recreate = cache
+        .state
+        .borrow()
+        .as_ref()
+        .map_or(true, |s| s.size != size);
+    if needs_recreate {
+        let d3d11_device = angle_d3d11_device(surfman_device)?;
+        let d3d11_shared_texture = create_d3d11_shared_texture(&d3d11_device, size)?;
+        let nt_handle = export_nt_handle(&d3d11_shared_texture)?;
+        *cache.state.borrow_mut() = Some(ExportState {
+            d3d11_shared_texture,
+            nt_handle,
+            size,
+        });
+    }
+
+    let cache_borrow = cache.state.borrow();
+    let state = cache_borrow.as_ref().expect("just initialized");
+
+    // Blit the current frame into the shared texture; `finish` so a consumer on
+    // a different device reads completed work rather than racing the GL blit.
+    blit_source_into_d3d11_texture(
+        surfman_device,
+        surfman_context,
+        glow_gl,
+        &state.d3d11_shared_texture,
+        source_fbo,
+        size,
+        true,
+    )?;
+
+    Ok(crate::Dx12SharedTexture {
+        size,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        generation,
+        producer_sync: crate::SyncMechanism::None,
+        fence_value: 0,
+        handle: state.nt_handle.0,
+    })
 }
 
 /// Pull the underlying ANGLE D3D11 device pointer out of a surfman device and
@@ -181,13 +318,13 @@ fn angle_d3d11_device(surfman_device: &surfman::Device) -> Result<ID3D11Device, 
 
 /// Allocate a new D3D11 shared texture on the ANGLE D3D11 device, export an NT
 /// handle, open it on the wgpu DX12 device, and wrap as a `wgpu::Texture`.
-fn init_size_dependent_state(
+/// Allocate an `R8G8B8A8_UNORM` D3D11 texture on the ANGLE D3D11 device with the
+/// `SHARED | SHARED_NTHANDLE` misc flags so it can be exported across devices.
+fn create_d3d11_shared_texture(
     d3d11_device: &ID3D11Device,
     size: PhysicalSize<u32>,
-    wgpu_device: &wgpu::Device,
-) -> Result<SizeDependentState, InteropError> {
+) -> Result<ID3D11Texture2D, InteropError> {
     unsafe {
-        // 1. Allocate the shared D3D11 texture.
         let mut d3d11_shared: Option<ID3D11Texture2D> = None;
         d3d11_device
             .CreateTexture2D(
@@ -205,26 +342,42 @@ fn init_size_dependent_state(
                     BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
                     CPUAccessFlags: 0,
                     MiscFlags: (D3D11_RESOURCE_MISC_SHARED.0
-                        | D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0)
-                        as u32,
+                        | D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0) as u32,
                 },
                 None,
                 Some(&mut d3d11_shared),
             )
             .map_err(|e| InteropError::Dx12(format!("D3D11 CreateTexture2D failed: {e}")))?;
-        let d3d11_shared_texture = d3d11_shared.ok_or_else(|| {
-            InteropError::Dx12("CreateTexture2D returned null texture".into())
-        })?;
+        d3d11_shared
+            .ok_or_else(|| InteropError::Dx12("CreateTexture2D returned null texture".into()))
+    }
+}
 
-        // 2. Export an NT handle from the D3D11 texture.
-        let dxgi_resource = d3d11_shared_texture
+/// Export a fresh DXGI NT shared handle from a `SHARED | SHARED_NTHANDLE` D3D11
+/// texture. The caller owns the returned handle and must `CloseHandle` it once
+/// every consumer has opened its own reference via `OpenSharedHandle`.
+fn export_nt_handle(texture: &ID3D11Texture2D) -> Result<HANDLE, InteropError> {
+    unsafe {
+        let dxgi_resource = texture
             .cast::<IDXGIResource1>()
             .map_err(|e| InteropError::Dx12(format!("Cast to IDXGIResource1 failed: {e}")))?;
-        let nt_handle = dxgi_resource
+        dxgi_resource
             .CreateSharedHandle(None, GENERIC_ALL.0, PCWSTR::null())
-            .map_err(|e| InteropError::Dx12(format!("DXGI CreateSharedHandle failed: {e}")))?;
+            .map_err(|e| InteropError::Dx12(format!("DXGI CreateSharedHandle failed: {e}")))
+    }
+}
 
-        // 3. Open the handle on the wgpu DX12 device.
+fn init_size_dependent_state(
+    d3d11_device: &ID3D11Device,
+    size: PhysicalSize<u32>,
+    wgpu_device: &wgpu::Device,
+) -> Result<SizeDependentState, InteropError> {
+    // 1. Allocate the shared D3D11 texture and export an NT handle for the host.
+    let d3d11_shared_texture = create_d3d11_shared_texture(d3d11_device, size)?;
+    let nt_handle = export_nt_handle(&d3d11_shared_texture)?;
+
+    unsafe {
+        // 2. Open the handle on the wgpu DX12 device.
         let hal_device = wgpu_device
             .as_hal::<wgpu::wgc::api::Dx12>()
             .ok_or(InteropError::BackendMismatch {
@@ -282,8 +435,11 @@ fn init_size_dependent_state(
     }
 }
 
-/// Blit `source_fbo` into the GL texture backing the ANGLE EGL pbuffer, with
-/// a Y-flip so the resulting image has top-left origin.
+/// Blit `source_fbo` into the GL texture backing the ANGLE EGL pbuffer.
+///
+/// No Y-flip here: the path reports `TextureOrigin::BottomLeft` and the single
+/// canonical flip-to-top-left is done by the importer's normalizer. Flipping
+/// here too would double-flip (upside down).
 fn blit_fbo_to_gl_texture(
     gl: &glow::Context,
     source_fbo: u32,
@@ -305,7 +461,7 @@ fn blit_fbo_to_gl_texture(
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, read_framebuffer);
 
         let (w, h) = (size.width as i32, size.height as i32);
-        gl.blit_framebuffer(0, 0, w, h, 0, h, w, 0, glow::COLOR_BUFFER_BIT, glow::NEAREST);
+        gl.blit_framebuffer(0, 0, w, h, 0, 0, w, h, glow::COLOR_BUFFER_BIT, glow::NEAREST);
         gl.flush();
 
         gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, None);

@@ -7,3 +7,12 @@ description = "Shared helpers for wgpu-graft demo applications"
 
 [dependencies]
 url = "2.5.7"
+
+# Windows-only: force mozangle to build the ANGLE runtime DLLs (libEGL.dll /
+# libGLESv2.dll). Servo pulls mozangle with no default features (translator
+# only), so `build_dlls` must be enabled from within the workspace. Cargo
+# feature unification then makes a normal demo build emit the DLLs into
+# mozangle's OUT_DIR, where each demo's build.rs copies them next to the exe.
+# This dependency is otherwise unused; it exists purely to enable the feature.
+[target.'cfg(windows)'.dependencies]
+mozangle = { version = "0.5.5", features = ["build_dlls"] }

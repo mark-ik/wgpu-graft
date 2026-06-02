@@ -3,14 +3,32 @@ name = "demo-servo-iced"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
-description = "Demo embedding Servo in an iced UI with URL bar and input forwarding"
+description = "Demo embedding Servo in an iced UI, zero-copy via D3D12 shared-handle import (CPU readback feature-gated)"
 
 [dependencies]
 demo-support = { path = "../demo-support" }
 euclid = "0.22.11"
-iced = { version = "0.14", features = ["image", "tokio"] }
-servo = "0.1.1"
+# iced master (0.15.0-dev) is on wgpu 28; the crates.io 0.14 release is on wgpu
+# 27. We need wgpu 28 so the imported texture is iced's own `wgpu::Texture` type
+# (grafting is built with `wgpu-28` and Cargo unifies them). Pinned to a rev
+# (not a moving branch); switch to the crates.io 0.15 release once it ships.
+iced = { git = "https://github.com/iced-rs/iced", rev = "4255f613", default-features = false, features = [
+    "wgpu",
+    "tiny-skia",
+    "tokio",
+    "image",
+] }
+servo = { git = "https://github.com/servo/servo", branch = "release/v0.2" }
 rustls = "0.23.37"
-servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", features = ["servo"] }
+pollster = "0.4.0"
+# wgpu-28 to match iced master; grafting + adapter must build with the same.
+grafting = { path = "../grafting", default-features = false, features = [
+    "wgpu-28",
+    "surfman",
+] }
+servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", default-features = false, features = [
+    "wgpu-28",
+    "servo",
+] }
 url = "2.5.7"
 winit = "0.30.12"

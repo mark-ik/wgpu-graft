@@ -17,7 +17,7 @@ use surfman::{Connection, Device, SurfaceType, chains::SwapChain};
 use grafting::{
     FrameProducer, HostWgpuContext, ImportOptions, ImportedTexture, InteropError, TextureImporter,
     WgpuTextureImporter,
-    surfman_gl::{SurfmanFrameContext, SurfmanFrameProducer},
+    surfman_gl::{SurfmanFrameContext, SurfmanFrameProducer, select_adapter_matching_surfman_luid},
 };
 use winit::dpi::PhysicalSize;
 
@@ -43,9 +43,37 @@ impl Drop for ServoWgpuRenderingContext {
 }
 
 impl ServoWgpuRenderingContext {
+    /// Create a rendering context on surfman's default GPU. Use this for the
+    /// CPU readback path, which routes frames through the CPU and does not need
+    /// the surfman GPU to match any host wgpu device.
     pub fn new(size: PhysicalSize<u32>) -> Result<Self, surfman::Error> {
         let connection = Connection::new()?;
         let adapter = connection.create_adapter()?;
+        Self::from_connection_adapter(connection, adapter, size)
+    }
+
+    /// Create a rendering context whose surfman/ANGLE GPU matches `wgpu_device`'s
+    /// GPU (by LUID). **Required for the zero-copy GPU import path on multi-GPU
+    /// hosts:** the shared D3D11 handle only works when surfman/ANGLE and the
+    /// host wgpu device live on the same physical GPU — otherwise the cross-GPU
+    /// read garbles (flicker). The host wgpu device must be DX12 (the LUID match
+    /// uses the DX12 adapter LUID).
+    pub fn new_for_device(
+        size: PhysicalSize<u32>,
+        wgpu_device: &wgpu::Device,
+    ) -> Result<Self, InteropError> {
+        let connection = Connection::new()
+            .map_err(|err| InteropError::Surfman(format!("Connection::new failed: {err:?}")))?;
+        let adapter = select_adapter_matching_surfman_luid(&connection, wgpu_device)?;
+        Self::from_connection_adapter(connection, adapter, size)
+            .map_err(|err| InteropError::Surfman(format!("{err:?}")))
+    }
+
+    fn from_connection_adapter(
+        connection: Connection,
+        adapter: surfman::Adapter,
+        size: PhysicalSize<u32>,
+    ) -> Result<Self, surfman::Error> {
         let surfman_rendering_info = Rc::new(SurfmanFrameContext::new(&connection, &adapter)?);
 
         let surfman_size = Size2D::new(size.width as i32, size.height as i32);
@@ -69,11 +97,34 @@ impl ServoWgpuRenderingContext {
         self.frame_producer.borrow_mut().acquire_frame()
     }
 
+    /// Export the current frame as a cross-device D3D12 shared texture
+    /// (Windows + ANGLE-D3D11 only).
+    ///
+    /// For consumers that own their own wgpu DX12 device and only expose it on
+    /// the render thread, so they cannot run the in-process GL import (e.g. the
+    /// iced `shader` widget, whose primitive must be `Send`). Paint the webview
+    /// first, then call this; open the returned handle on the consumer device
+    /// with [`grafting::import_dx12_shared_texture`]. The content is
+    /// **bottom-left** origin `Rgba8Unorm` (flip on the consumer).
+    #[cfg(target_os = "windows")]
+    pub fn current_dx12_shared_texture(
+        &self,
+    ) -> Result<grafting::Dx12SharedTexture, InteropError> {
+        self.frame_producer.borrow().export_dx12_shared_texture()
+    }
+
     pub fn size(&self) -> PhysicalSize<u32> {
         self.frame_producer.borrow().size()
     }
 
-    /// Resize the surfman rendering context (e.g. after a window resize).
+    /// Resize the surfman rendering context directly.
+    ///
+    /// Embedders driving a `servo::WebView` should resize through
+    /// [`servo::WebView::resize`] instead, which resizes this context *and*
+    /// updates the webview rect + document view. Calling this first makes
+    /// Servo's `resize_rendering_context` early-return before it updates the
+    /// rect, pinning the page to its previous size. Use this only for the CPU
+    /// readback path or other non-WebView consumers.
     pub fn resize_viewport(&self, size: PhysicalSize<u32>) {
         let surfman_rendering_info = self.frame_producer.borrow().context();
         if self.frame_producer.borrow().size() == size {
@@ -137,12 +188,24 @@ impl RenderingContext for ServoWgpuRenderingContext {
     }
 
     fn present(&self) {
-        let surfman_rendering_info = self.frame_producer.borrow().context();
-        let mut device = surfman_rendering_info.device.borrow_mut();
-        let mut context = surfman_rendering_info.context.borrow_mut();
-        let _ = self
-            .swap_chain
-            .swap_buffers(&mut *device, &mut *context, PreserveBuffer::No);
+        // Swap so ANGLE resolves the rendered frame into the presentable
+        // surface — the zero-copy import aliases that surface, and without a
+        // swap it is never updated (reads black). PreserveBuffer::Yes keeps the
+        // content in the buffer the importer then reads, and `finish()` blocks
+        // until the GL/ANGLE work completes so the cross-API (→ wgpu) read does
+        // not race the in-flight render (the flicker). The CPU readback path is
+        // unaffected — `glReadPixels` reads the FBO directly and blocks itself.
+        let info = self.frame_producer.borrow().context();
+        {
+            let mut device = info.device.borrow_mut();
+            let mut context = info.context.borrow_mut();
+            let _ = self.swap_chain.swap_buffers(
+                &mut *device,
+                &mut *context,
+                PreserveBuffer::Yes(&info.glow_gl),
+            );
+        }
+        info.gleam_gl.finish();
     }
 
     fn make_current(&self) -> Result<(), surfman::Error> {
@@ -269,9 +332,108 @@ impl RenderingContext for CapturingRenderingContext {
     }
 }
 
+/// A [`RenderingContext`] that imports each rendered frame into a host
+/// `wgpu::Texture` **inside `present()`, before the swap-chain flip** — the
+/// only moment the freshly-rendered back-buffer is still the current surface.
+///
+/// Importing *after* `present()` (post-swap) reads the wrong buffer of the
+/// double-buffered attached swap chain, which alternates blank/stale content
+/// and causes flicker. This mirrors how [`CapturingRenderingContext`] reads for
+/// the CPU path, but performs a zero-copy GPU import instead.
+///
+/// Call [`ImportingRenderingContext::take_imported`] after
+/// [`servo::WebView::paint`] to obtain the most-recently imported frame.
+#[cfg(feature = "servo")]
+pub struct ImportingRenderingContext {
+    inner: Rc<ServoWgpuRenderingContext>,
+    importer: WgpuTextureImporter,
+    options: ImportOptions,
+    last_texture: RefCell<Option<ImportedTexture>>,
+}
+
+#[cfg(feature = "servo")]
+impl ImportingRenderingContext {
+    pub fn new(inner: Rc<ServoWgpuRenderingContext>, importer: WgpuTextureImporter) -> Self {
+        Self {
+            inner,
+            importer,
+            options: ImportOptions::default(),
+            last_texture: RefCell::new(None),
+        }
+    }
+
+    /// Returns the frame imported during the last `present()`, clearing it so
+    /// repeated calls without a new paint return `None`.
+    pub fn take_imported(&self) -> Option<ImportedTexture> {
+        self.last_texture.borrow_mut().take()
+    }
+}
+
+#[cfg(feature = "servo")]
+impl RenderingContext for ImportingRenderingContext {
+    fn prepare_for_rendering(&self) {
+        self.inner.prepare_for_rendering();
+    }
+
+    fn read_to_image(&self, source_rectangle: DeviceIntRect) -> Option<image::RgbaImage> {
+        self.inner.read_to_image(source_rectangle)
+    }
+
+    fn size(&self) -> PhysicalSize<u32> {
+        self.inner.size()
+    }
+
+    fn resize(&self, size: PhysicalSize<u32>) {
+        self.inner.resize(size);
+    }
+
+    /// Import the rendered back-buffer into a wgpu texture **before** the swap.
+    fn present(&self) {
+        // Drain GL errors left by Servo's rendering so the import's own error
+        // checks aren't tripped by pending producer errors.
+        let gl = self.inner.gleam_gl_api();
+        while gl.get_error() != gleam::gl::NO_ERROR {}
+
+        match self.inner.acquire_native_frame() {
+            Ok(frame) => match self.importer.import_frame(&frame, &self.options) {
+                Ok(imported) => *self.last_texture.borrow_mut() = Some(imported),
+                Err(e) => eprintln!("[adapter] present-hook import_frame failed: {e:?}"),
+            },
+            Err(e) => eprintln!("[adapter] present-hook acquire_native_frame failed: {e:?}"),
+        }
+        self.inner.present();
+    }
+
+    fn make_current(&self) -> Result<(), surfman::Error> {
+        self.inner.make_current()
+    }
+
+    fn gleam_gl_api(&self) -> Rc<dyn gleam::gl::Gl> {
+        self.inner.gleam_gl_api()
+    }
+
+    fn glow_gl_api(&self) -> std::sync::Arc<glow::Context> {
+        self.inner.glow_gl_api()
+    }
+
+    fn create_texture(&self, surface: Surface) -> Option<(SurfaceTexture, u32, Size2D<i32>)> {
+        self.inner.create_texture(surface)
+    }
+
+    fn destroy_texture(&self, surface_texture: SurfaceTexture) -> Option<Surface> {
+        self.inner.destroy_texture(surface_texture)
+    }
+
+    fn connection(&self) -> Option<Connection> {
+        self.inner.connection()
+    }
+}
+
 pub struct ServoWgpuInteropAdapter {
     importer: WgpuTextureImporter,
     rendering_context: Rc<ServoWgpuRenderingContext>,
+    #[cfg(feature = "servo")]
+    importing_context: Rc<ImportingRenderingContext>,
 }
 
 impl ServoWgpuInteropAdapter {
@@ -279,25 +441,50 @@ impl ServoWgpuInteropAdapter {
         device: wgpu::Device,
         queue: wgpu::Queue,
         size: PhysicalSize<u32>,
-    ) -> Result<Self, surfman::Error> {
-        let rendering_context = Rc::new(ServoWgpuRenderingContext::new(size)?);
-        let importer = WgpuTextureImporter::new(HostWgpuContext::new(device, queue));
+    ) -> Result<Self, InteropError> {
+        // LUID-match surfman/ANGLE to the host wgpu GPU so the zero-copy shared
+        // handle stays on a single GPU (cross-GPU sharing garbles → flicker).
+        let rendering_context = Rc::new(ServoWgpuRenderingContext::new_for_device(size, &device)?);
+        let importer =
+            WgpuTextureImporter::new(HostWgpuContext::new(device.clone(), queue.clone()));
+
+        #[cfg(feature = "servo")]
+        let importing_context = Rc::new(ImportingRenderingContext::new(
+            rendering_context.clone(),
+            WgpuTextureImporter::new(HostWgpuContext::new(device, queue)),
+        ));
 
         Ok(Self {
             importer,
             rendering_context,
+            #[cfg(feature = "servo")]
+            importing_context,
         })
     }
 
+    /// The rendering context to hand to `WebViewBuilder`. It imports each frame
+    /// into a wgpu texture inside `present()` (before the swap-chain flip);
+    /// retrieve it with [`take_imported_texture`](Self::take_imported_texture).
     #[cfg(feature = "servo")]
     pub fn rendering_context(&self) -> Rc<dyn RenderingContext> {
         self.rendering_context.clone()
+    }
+
+    /// The zero-copy frame imported during the last `present()` (the most recent
+    /// [`servo::WebView::paint`]). Flicker-free: captured before the swap flip.
+    #[cfg(feature = "servo")]
+    pub fn take_imported_texture(&self) -> Option<ImportedTexture> {
+        self.importing_context.take_imported()
     }
 
     pub fn rendering_context_handle(&self) -> Rc<ServoWgpuRenderingContext> {
         self.rendering_context.clone()
     }
 
+    /// Direct (post-swap) import. Prefer the `present()`-hook path
+    /// ([`rendering_context`](Self::rendering_context) +
+    /// [`take_imported_texture`](Self::take_imported_texture)) with Servo;
+    /// importing post-swap reads the wrong swap-chain buffer (flicker).
     pub fn import_current_frame(
         &self,
         options: &ImportOptions,

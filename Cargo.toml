@@ -2,8 +2,11 @@
 members = [
     "demo-support",
     "demo-raw-gl",
+    "demo-servo-blitz",
+    "demo-servo-egui",
     "demo-servo-gpui",
     "demo-servo-iced",
+    "demo-servo-slint",
     "demo-servo-winit",
     "demo-servo-xilem",
     "grafting",

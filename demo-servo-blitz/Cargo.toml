@@ -1,20 +1,21 @@
 [package]
-name = "demo-servo-xilem"
+name = "demo-servo-blitz"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
-description = "Demo embedding Servo in a Xilem UI via CPU texture readback"
+description = "Demo embedding Servo via the Blitz renderer (anyrender_vello), zero-copy wgpu texture import"
 
 [dependencies]
 demo-support = { path = "../demo-support" }
 euclid = "0.22.11"
-image = "0.25"
+anyrender = "0.10"
+anyrender_vello = "0.10"
+vello = "0.9"
 servo = { git = "https://github.com/servo/servo", branch = "release/v0.2" }
-masonry = "0.4.0"
-masonry_winit = "0.4.0"
 rustls = "0.23.37"
+pollster = "0.4.0"
+grafting = { path = "../grafting" }
 servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", features = ["servo"] }
-tokio = { version = "1", features = ["sync"] }
 url = "2.5.7"
 winit = "0.30.12"
-xilem = "0.4.0"
+wgpu = { version = "29.0.1", features = ["metal"] }

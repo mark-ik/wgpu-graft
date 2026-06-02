@@ -1,0 +1,33 @@
+[package]
+name = "demo-servo-egui"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+description = "Demo embedding Servo in an egui/eframe app, zero-copy GPU texture import (CPU readback feature-gated)"
+
+[features]
+default = []
+# Use CPU readback instead of zero-copy GPU import. Zero-copy is the default
+# and the point of this workspace; this feature exists only as an alternative
+# mechanism for comparison or when GPU import is unavailable.
+cpu-readback = []
+
+[dependencies]
+demo-support = { path = "../demo-support" }
+# eframe re-exports `egui`, `egui_wgpu`, and `wgpu` (the latter two with the
+# `wgpu` feature). We use those re-exports so the demo names the exact same
+# wgpu crate egui composites with, which must also unify with the adapter's
+# wgpu 29 for the imported texture to be the same type.
+eframe = { version = "0.34", default-features = false, features = [
+    "wgpu",
+    "default_fonts",
+    "wayland",
+    "x11",
+] }
+euclid = "0.22.11"
+image = "0.25"
+servo = { git = "https://github.com/servo/servo", branch = "release/v0.2" }
+rustls = "0.23.37"
+servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", features = ["servo"] }
+url = "2.5.7"
+winit = "0.30.12"

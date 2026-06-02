@@ -34,6 +34,8 @@ pub struct SurfmanFrameProducer {
     generation: Cell<u64>,
     #[cfg(target_os = "windows")]
     angle_dx12_shared: Rc<windows_dx12_shared::AngleDx12SharedCache>,
+    #[cfg(target_os = "windows")]
+    angle_dx12_export: Rc<windows_dx12_shared::AngleDx12ExportCache>,
 }
 
 #[cfg_attr(target_os = "windows", allow(dead_code))]
@@ -53,6 +55,8 @@ impl SurfmanFrameProducer {
             generation: Cell::new(0),
             #[cfg(target_os = "windows")]
             angle_dx12_shared: Rc::new(windows_dx12_shared::AngleDx12SharedCache::new()),
+            #[cfg(target_os = "windows")]
+            angle_dx12_export: Rc::new(windows_dx12_shared::AngleDx12ExportCache::new()),
         }
     }
 
@@ -66,6 +70,33 @@ impl SurfmanFrameProducer {
 
     pub fn set_size(&self, size: PhysicalSize<u32>) {
         self.size.set(size);
+    }
+
+    /// Export the current frame as a cross-device D3D12 shared texture
+    /// (Windows + ANGLE-D3D11 only).
+    ///
+    /// For consumers that own their own wgpu DX12 device and only expose it on
+    /// the render thread (so they cannot run the same-device GL import). Paint
+    /// the webview first, then call this; open the returned handle on the
+    /// consumer device with [`crate::import_dx12_shared_texture`]. The content is
+    /// **bottom-left** origin `Rgba8Unorm` (flip on the consumer).
+    #[cfg(target_os = "windows")]
+    pub fn export_dx12_shared_texture(&self) -> Result<crate::Dx12SharedTexture, InteropError> {
+        let device = self.context.device.borrow();
+        let mut context = self.context.context.borrow_mut();
+        device
+            .make_context_current(&mut context)
+            .map_err(|err| InteropError::Surfman(format!("{err:?}")))?;
+        let bound_fbo = windows::surface_fbo(&device, &context);
+        windows_dx12_shared::export_current_frame(
+            &self.angle_dx12_export,
+            &device,
+            &mut context,
+            &self.context.glow_gl,
+            bound_fbo,
+            self.size.get(),
+            self.generation.get(),
+        )
     }
 }
 

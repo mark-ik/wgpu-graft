@@ -37,6 +37,17 @@ mod metal_texture_ref;
 #[cfg(target_os = "windows")]
 mod dx12_shared_texture;
 
+/// Import a D3D12/D3D11 shared NT handle (described by [`Dx12SharedTexture`])
+/// into a `wgpu::Texture` on the given [`HostWgpuContext`]'s DX12 device.
+///
+/// The returned texture aliases the shared resource (no copy). Use this with
+/// [`crate::surfman_gl`]'s shared-handle export path when the consumer owns its
+/// own wgpu device (e.g. a UI framework that exposes the device only on its
+/// render thread). The caller is responsible for any required Y-flip and for
+/// closing its copy of the handle once consumers have opened their references.
+#[cfg(target_os = "windows")]
+pub use dx12_shared_texture::import_dx12_shared_texture;
+
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
 mod gl_bindings {
     #![allow(unsafe_op_in_unsafe_fn)]
@@ -439,15 +450,15 @@ pub trait TextureImporter {
 pub struct WgpuTextureImporter {
     host: HostWgpuContext,
     synchronizer: Box<dyn InteropSynchronizer>,
+    /// Copies a bottom-left aliased import into a fresh, host-owned, top-left
+    /// `Rgba8Unorm` texture (see [`import_frame`](Self::import_frame)).
+    normalizer: crate::raw_gl::texture_normalizer::ImportedTextureNormalizer,
 }
 
 impl WgpuTextureImporter {
     /// Create a new importer with the default [`ImplicitOnlySynchronizer`].
     pub fn new(host: HostWgpuContext) -> Self {
-        Self {
-            host,
-            synchronizer: Box::new(ImplicitOnlySynchronizer),
-        }
+        Self::with_synchronizer(host, Box::new(ImplicitOnlySynchronizer))
     }
 
     /// Create a new importer with a custom [`InteropSynchronizer`].
@@ -455,7 +466,13 @@ impl WgpuTextureImporter {
         host: HostWgpuContext,
         synchronizer: Box<dyn InteropSynchronizer>,
     ) -> Self {
-        Self { host, synchronizer }
+        let normalizer =
+            crate::raw_gl::texture_normalizer::ImportedTextureNormalizer::new(&host.device);
+        Self {
+            host,
+            synchronizer,
+            normalizer,
+        }
     }
 
     /// Returns the underlying [`HostWgpuContext`].
@@ -481,8 +498,33 @@ impl TextureImporter for WgpuTextureImporter {
             }
             NativeFrame::VulkanExternalImage(frame) => import_vulkan_external_image(frame, &self.host),
             NativeFrame::MetalTextureRef(frame) => import_metal_texture_ref(frame, &self.host),
-            NativeFrame::Dx12SharedTexture(frame) => import_dx12_shared_texture(frame, &self.host),
+            NativeFrame::Dx12SharedTexture(frame) => import_dx12_shared_frame(frame, &self.host),
         }?;
+
+        // The GL-producer paths return a texture that ALIASES the producer's
+        // live surface (bottom-left origin, no copy). When normalization is
+        // requested (the default), blit it into a fresh, host-owned top-left
+        // `Rgba8Unorm` texture. This both corrects orientation and decouples the
+        // consumer from the producer's in-place rendering — sampling the live
+        // alias across frames otherwise races with the producer and flickers.
+        // Paths that already return a normalized top-left texture (Metal) are
+        // left untouched.
+        let imported = if options.normalize_origin && imported.origin == TextureOrigin::BottomLeft {
+            let texture = self.normalizer.normalize(
+                &self.host.device,
+                &self.host.queue,
+                &imported.texture,
+                imported.size,
+            );
+            ImportedTexture {
+                texture,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                origin: TextureOrigin::TopLeft,
+                ..imported
+            }
+        } else {
+            imported
+        };
 
         self.synchronizer
             .consumer_ready(&imported, imported.consumer_sync)?;
@@ -630,7 +672,7 @@ fn import_metal_texture_ref(
     ))
 }
 
-fn import_dx12_shared_texture(
+fn import_dx12_shared_frame(
     #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] frame: &Dx12SharedTexture,
     #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] host: &HostWgpuContext,
 ) -> Result<ImportedTexture, InteropError> {

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>servo-wgpu-interop animated fixture</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-a: #081421;
+      --bg-b: #112f44;
+      --ink: #f5f7fb;
+      --muted: #b7cad8;
+      --accent: #f4a261;
+      --accent-2: #2ec4b6;
+      --card: rgba(8, 20, 33, 0.72);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 18% 18%, rgba(244, 162, 97, 0.16), transparent 24%),
+        radial-gradient(circle at 78% 24%, rgba(46, 196, 182, 0.18), transparent 20%),
+        linear-gradient(145deg, var(--bg-a), var(--bg-b));
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(18px);
+      opacity: 0.65;
+      animation: drift 12s ease-in-out infinite alternate;
+    }
+
+    .orb.one {
+      inset: 8% auto auto 12%;
+      width: 18rem;
+      height: 18rem;
+      background: rgba(244, 162, 97, 0.36);
+    }
+
+    .orb.two {
+      inset: auto 10% 8% auto;
+      width: 24rem;
+      height: 24rem;
+      background: rgba(46, 196, 182, 0.22);
+      animation-duration: 15s;
+    }
+
+    main {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+    }
+
+    .panel {
+      width: min(46rem, 100%);
+      padding: 2rem 2.25rem;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 1.5rem;
+      background: var(--card);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+    }
+
+    h1 {
+      margin: 0 0 0.5rem;
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+    }
+
+    p {
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.6;
+    }
+
+    .status {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+    }
+
+    .chip {
+      padding: 0.65rem 0.9rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 0.92rem;
+    }
+
+    .ticker {
+      margin-top: 1.5rem;
+      height: 0.75rem;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .ticker::before {
+      content: "";
+      display: block;
+      width: 28%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      animation: slide 2.4s ease-in-out infinite alternate;
+    }
+
+    @keyframes slide {
+      from { transform: translateX(0%); }
+      to { transform: translateX(260%); }
+    }
+
+    @keyframes drift {
+      from { transform: translate3d(-1.5rem, -0.75rem, 0) scale(0.96); }
+      to { transform: translate3d(1.5rem, 1.25rem, 0) scale(1.05); }
+    }
+  </style>
+</head>
+<body>
+  <div class="orb one"></div>
+  <div class="orb two"></div>
+  <main>
+    <section class="panel">
+      <h1>Servo in a host-owned wgpu frame</h1>
+      <p>
+        This fixture keeps producing fresh frames so the demo can validate redraw scheduling,
+        offscreen painting, native texture import, and fullscreen presentation through the host
+        renderer.
+      </p>
+      <div class="status">
+        <div class="chip">Animation frame: <span id="frame-counter">0</span></div>
+        <div class="chip">Current time: <span id="wall-clock">--:--:--</span></div>
+      </div>
+      <div class="ticker" aria-hidden="true"></div>
+    </section>
+  </main>
+  <script>
+    const frameCounter = document.getElementById("frame-counter");
+    const wallClock = document.getElementById("wall-clock");
+    let frames = 0;
+
+    function tick() {
+      frames += 1;
+      frameCounter.textContent = String(frames);
+      wallClock.textContent = new Date().toLocaleTimeString();
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

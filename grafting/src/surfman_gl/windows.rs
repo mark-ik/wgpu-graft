@@ -30,7 +30,7 @@ pub(super) fn import_current_frame(
                 texture,
                 format: wgpu::TextureFormat::Bgra8Unorm,
                 size: frame.size(),
-                origin: TextureOrigin::TopLeft,
+                origin: TextureOrigin::BottomLeft,
                 generation: source.generation,
                 consumer_sync: SyncMechanism::ImplicitGlFlush,
             });
@@ -78,7 +78,7 @@ pub(super) fn import_current_frame(
         texture,
         format: wgpu::TextureFormat::Rgba8Unorm,
         size: frame.size(),
-        origin: TextureOrigin::TopLeft,
+        origin: TextureOrigin::BottomLeft,
         generation: source.generation,
         consumer_sync: SyncMechanism::ImplicitGlFlush,
     })
@@ -127,7 +127,7 @@ pub(super) fn import_current_frame_dx12(
                 texture,
                 format: wgpu::TextureFormat::Rgba8Unorm,
                 size: frame.size(),
-                origin: TextureOrigin::TopLeft,
+                origin: TextureOrigin::BottomLeft,
                 generation: source.generation,
                 consumer_sync: SyncMechanism::ImplicitGlFlush,
             });
@@ -176,7 +176,7 @@ pub(super) fn import_current_frame_dx12(
         texture,
         format: wgpu::TextureFormat::Rgba8Unorm,
         size: frame.size(),
-        origin: TextureOrigin::TopLeft,
+        origin: TextureOrigin::BottomLeft,
         generation: source.generation,
         consumer_sync: SyncMechanism::ImplicitGlFlush,
     })
@@ -185,7 +185,7 @@ pub(super) fn import_current_frame_dx12(
 /// Read the current surfman surface's GL framebuffer object id without
 /// unbinding the surface. Returns `0` (the default framebuffer) if no
 /// surface-backed framebuffer is reported.
-fn surface_fbo(device: &surfman::Device, context: &surfman::Context) -> u32 {
+pub(super) fn surface_fbo(device: &surfman::Device, context: &surfman::Context) -> u32 {
     device
         .context_surface_info(context)
         .ok()

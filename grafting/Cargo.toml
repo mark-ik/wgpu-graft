@@ -28,9 +28,12 @@ wgpu_28 = { package = "wgpu", version = "28.0.0", features = ["metal"], optional
 wgpu_hal_28 = { package = "wgpu-hal", version = "28.0.0", optional = true }
 euclid = { version = "0.22.11", optional = true }
 gleam = { version = "0.15.1", optional = true }
-glow = "0.16.0"
+# surfman 0.12 + glow 0.17 match Servo v0.2.0's pins so the GL producer types
+# (Surface/Connection/Context) unify across the servo-wgpu-interop-adapter
+# boundary. Servo's RenderingContext hands these exact types to/from grafting.
+glow = "0.17.0"
 image = { version = "0.25", optional = true }
-surfman = { version = "0.11.0", features = ["chains", "sm-angle-default"], optional = true }
+surfman = { version = "0.12.0", features = ["chains", "sm-angle-default"], optional = true }
 dpi = "0.1.2"
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))'.dependencies]

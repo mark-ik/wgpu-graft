@@ -2,6 +2,7 @@
 members = [
     "demo-support",
     "demo-raw-gl",
+    "demo-servo-bevy",
     "demo-servo-blitz",
     "demo-servo-egui",
     "demo-servo-gpui",

@@ -46,9 +46,24 @@ Approach:
 4. Render-world system: `import_dx12_shared_texture(&frame, &HostWgpuContext::new(device.wgpu_device().clone(), (**queue).clone()))` → build `GpuImage` → `RenderAssets::<GpuImage>::insert(handle_id, gpu_image)`.
 5. Main world: a fullscreen `Sprite`/UI node on a `Handle<Image>` placeholder (size/format only, `RENDER_WORLD` usage). 2D camera.
 
-Open questions to resolve in build: exact `RenderApp` system-set placement for the import (after `prepare_assets`?), constructing `GpuImage.texture_descriptor` cleanly, whether to cache the import per-size (avoid per-frame `OpenSharedHandle`).
+### Verified Bevy 0.19.0-rc.2 API (read from source 2026-06-02)
 
-Scaffold was removed for the clean six-demo checkpoint; recreate `demo-servo-bevy/` with the Cargo.toml below.
+- `bevy::render::settings`: `WgpuSettings { backends: Option<Backends>, power_preference, device_label, features, limits, .. }` (Default); `RenderCreation::Automatic(WgpuSettings)`; `RenderPlugin { render_creation: RenderCreation, .. }`. Force DX12+HP: `DefaultPlugins.set(RenderPlugin { render_creation: RenderCreation::Automatic(WgpuSettings { backends: Some(Backends::DX12), power_preference: PowerPreference::HighPerformance, ..default() }), ..default() })`.
+- `bevy::render::{RenderApp, Render, RenderSet, ExtractSchedule, Extract}` (lib.rs). `RenderApp` is the sub-app label: `app.sub_app_mut(RenderApp)`. `Extract<'w,'s, P>` is the system param to read main-world data in an `ExtractSchedule` system.
+- `RenderDevice::wgpu_device() -> &wgpu::Device` (renderer/render_device.rs:259).
+- `RenderQueue(pub Arc<WgpuWrapper<Queue>>)` with `Deref`/`DerefMut` (renderer/mod.rs:124) → get the wgpu queue via `(**render_queue.0).clone()` (Arc→WgpuWrapper→Queue; `wgpu::Queue: Clone`).
+- `GpuImage { texture, texture_view, sampler, texture_descriptor: wgpu_types::TextureDescriptor<Option<&'static str>, &'static [TextureFormat]>, texture_view_descriptor: Option<...>, had_data: bool }`. Build: `texture.create_view(&Default::default())` for the view; sampler from `Res<DefaultImageSampler>` (`(***default_sampler).clone()`); `texture_descriptor` = a `TextureDescriptor { label: None, size, mip_level_count:1, sample_count:1, dimension: D2, format: Rgba8Unorm, usage: TEXTURE_BINDING|COPY_DST, view_formats: &[] }`.
+- `RenderAssets::<GpuImage>::insert(id: impl Into<AssetId<Image>>, GpuImage)` (render_asset.rs:224). Key it by the placeholder handle's `AssetId`.
+- `bevy_image::Image::new_uninit(size: Extent3d, dimension: TextureDimension, format: TextureFormat, asset_usage: RenderAssetUsages)` for the placeholder; use `RenderAssetUsages::RENDER_WORLD`. Sprite: `Sprite::from_image(handle)`; 2D camera: `Camera2d` (prelude).
+
+### Wiring (to finalize against the build)
+
+- Main world: `WgpuSettings` DX12; throwaway HP-DX12 device → `new_for_device` anchors surfman; Servo as `NonSendMut`/`NonSend` resource; `Assets<Image>` placeholder (`new_uninit`, RENDER_WORLD) → `Handle<Image>` on a `Sprite` + `Camera2d`. Store the handle in a `Resource`.
+- Main-world `Update` system (`NonSend`): paint Servo → `current_dx12_shared_texture()` → write a `SharedFrame { handle:u64, w,h }` resource.
+- `app.sub_app_mut(RenderApp)`: add an `ExtractSchedule` system using `Extract<Res<SharedFrame>>` + `Extract<Res<ServoImageHandle>>` to copy them into the render world; add the inject system to `Render` in `RenderSet::Prepare` (after `RenderSet::PrepareAssets`) that imports via `grafting::import_dx12_shared_texture` and `RenderAssets::<GpuImage>::insert`.
+- Open: confirm exact `RenderSet` variant ordering (PrepareAssets → Prepare); whether to cache the imported texture per-size to avoid per-frame `OpenSharedHandle`; placeholder image format must match the imported texture (`Rgba8Unorm`, top-left from the default normalize path).
+
+Recreate `demo-servo-bevy/` with the Cargo.toml below (scaffold + Cargo.toml committed as WIP head-start).
 
 ```toml
 bevy = { version = "0.19.0-rc.2", default-features = false, features = [

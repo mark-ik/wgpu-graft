@@ -1,0 +1,29 @@
+[package]
+name = "demo-servo-bevy"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+description = "Demo embedding Servo in a Bevy app, zero-copy via D3D12 shared-handle import into a GpuImage"
+
+[dependencies]
+demo-support = { path = "../demo-support" }
+euclid = "0.22.11"
+# Bevy 0.19.0-rc.2 is on wgpu 29 (the 0.18 stable line is wgpu 27). Using the RC
+# keeps the imported texture as Bevy's own wgpu::Texture type with no new
+# grafting wgpu version.
+bevy = { version = "0.19.0-rc.2", default-features = false, features = [
+    "bevy_winit",
+    "bevy_core_pipeline",
+    "bevy_sprite",
+    "bevy_window",
+    "bevy_asset",
+    "x11",
+] }
+servo = { git = "https://github.com/servo/servo", branch = "release/v0.2" }
+rustls = "0.23.37"
+pollster = "0.4.0"
+grafting = { path = "../grafting" }
+servo-wgpu-interop-adapter = { path = "../servo-wgpu-interop-adapter", features = ["servo"] }
+url = "2.5.7"
+winit = "0.30.12"
+wgpu = { version = "29.0.1", features = ["metal"] }

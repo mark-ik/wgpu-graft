@@ -24,8 +24,7 @@ use bevy::image::Image;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_resource::{
-    DefaultImageSampler, Extent3d, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureViewDescriptor,
+    Extent3d, TextureDimension, TextureFormat, TextureUsages,
 };
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::settings::{Backends, PowerPreference, RenderCreation, WgpuSettings};
@@ -118,7 +117,7 @@ fn main() {
     app.insert_non_send(servo_state)
         .init_resource::<ServoFrame>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (drive_servo, fit_sprite_to_window));
+        .add_systems(Update, (drive_servo, resize_servo_image, fit_sprite_to_window));
 
     // Render world: extract the handle, then inject the imported texture.
     let render_app = app.sub_app_mut(RenderApp);
@@ -193,9 +192,11 @@ fn setup(
 ) {
     commands.spawn(Camera2d);
 
-    // Placeholder image; its GpuImage is overwritten each frame in the render
-    // world with the imported Servo texture. RENDER_WORLD only (no CPU data).
-    let placeholder = Image::new_uninit(
+    // Bevy owns this texture; the render world COPIES the imported Servo frame
+    // into it each frame (so the sprite's bind group aliases a stable Bevy
+    // texture, not the short-lived shared-handle import). RENDER_WORLD only (no
+    // CPU data); needs COPY_DST for the copy and TEXTURE_BINDING to be sampled.
+    let mut placeholder = Image::new_uninit(
         Extent3d {
             width: DEFAULT_WIDTH,
             height: DEFAULT_HEIGHT,
@@ -205,6 +206,8 @@ fn setup(
         TextureFormat::Rgba8Unorm,
         RenderAssetUsages::RENDER_WORLD,
     );
+    placeholder.texture_descriptor.usage =
+        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST;
     let handle = images.add(placeholder);
     commands.insert_resource(ServoImage(handle.clone()));
 
@@ -216,8 +219,8 @@ fn setup(
     commands.spawn(Sprite {
         image: handle,
         custom_size: Some(size),
-        // The imported texture is top-left origin; Bevy's 2D sprite samples with
-        // a y-up convention, so flip vertically to display the page upright.
+        // The exported Servo texture is bottom-left origin; flip vertically so
+        // the page displays upright.
         flip_y: true,
         ..default()
     });
@@ -260,6 +263,30 @@ fn drive_servo(
     }
 }
 
+/// Keep the Bevy-owned placeholder image sized to the Servo frame. Resizing the
+/// asset fires an `AssetEvent::Modified`, which makes Bevy re-create the GpuImage
+/// texture at the new size and refresh the sprite's image bind group (otherwise
+/// the cached bind group would keep pointing at the old-size texture).
+fn resize_servo_image(
+    frame: Res<ServoFrame>,
+    servo_image: Res<ServoImage>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Some(desc) = frame.0 else {
+        return;
+    };
+    if let Some(mut image) = images.get_mut(&servo_image.0) {
+        let size = image.texture_descriptor.size;
+        if size.width != desc.width || size.height != desc.height {
+            image.texture_descriptor.size = Extent3d {
+                width: desc.width,
+                height: desc.height,
+                depth_or_array_layers: 1,
+            };
+        }
+    }
+}
+
 fn fit_sprite_to_window(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut sprites: Query<&mut Sprite>,
@@ -292,12 +319,21 @@ fn inject_servo_image(
     image_id: Res<ExtractedImageId>,
     device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
-    default_sampler: Res<DefaultImageSampler>,
-    mut images: ResMut<RenderAssets<GpuImage>>,
+    gpu_images: Res<RenderAssets<GpuImage>>,
 ) {
     let (Some(desc), Some(id)) = (frame.0, image_id.0) else {
         return;
     };
+    // Bevy's own GpuImage for the sprite. It lags a frame during resize, so only
+    // copy when its size matches the freshly imported frame.
+    let Some(gpu_image) = gpu_images.get(id) else {
+        return;
+    };
+    if gpu_image.texture_descriptor.size.width != desc.width
+        || gpu_image.texture_descriptor.size.height != desc.height
+    {
+        return;
+    }
 
     let shared = Dx12SharedTexture {
         size: PhysicalSize::new(desc.width, desc.height),
@@ -307,42 +343,34 @@ fn inject_servo_image(
         fence_value: 0,
         handle: desc.handle as *mut c_void,
     };
-    let host = HostWgpuContext::new(
-        device.wgpu_device().clone(),
-        (**render_queue.0).clone(),
-    );
-    let texture = match import_dx12_shared_texture(&shared, &host) {
+    let host = HostWgpuContext::new(device.wgpu_device().clone(), (**render_queue.0).clone());
+    let imported = match import_dx12_shared_texture(&shared, &host) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("[bevy] import_dx12_shared_texture failed: {e:?}");
             return;
         }
     };
-    let texture_view = texture.create_view(&TextureViewDescriptor::default());
-    let sampler = (***default_sampler).clone();
 
-    let gpu_image = GpuImage {
-        texture: texture.into(),
-        texture_view: texture_view.into(),
-        sampler: sampler.into(),
-        texture_descriptor: TextureDescriptor {
-            label: None,
-            size: Extent3d {
-                width: desc.width,
-                height: desc.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC,
-            view_formats: &[],
+    // Copy the imported (short-lived) alias into Bevy's stable owned texture, so
+    // the sprite's cached bind group keeps sampling a texture that stays valid
+    // across frames and resizes.
+    let mut encoder =
+        device
+            .wgpu_device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("servo-bevy-copy"),
+            });
+    encoder.copy_texture_to_texture(
+        imported.as_image_copy(),
+        gpu_image.texture.as_image_copy(),
+        Extent3d {
+            width: desc.width,
+            height: desc.height,
+            depth_or_array_layers: 1,
         },
-        texture_view_descriptor: None,
-        had_data: true,
-    };
-    images.insert(id, gpu_image);
+    );
+    render_queue.submit([encoder.finish()]);
 }
 
 // ── Servo support ────────────────────────────────────────────────────────────

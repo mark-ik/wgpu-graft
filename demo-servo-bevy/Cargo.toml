@@ -15,6 +15,9 @@ bevy = { version = "0.19.0-rc.2", default-features = false, features = [
     "bevy_winit",
     "bevy_core_pipeline",
     "bevy_sprite",
+    # Bevy 0.19 split sprite drawing out of `bevy_sprite`: the SpriteRenderPlugin
+    # (which actually renders sprites) lives behind `bevy_sprite_render`.
+    "bevy_sprite_render",
     "bevy_window",
     "bevy_asset",
     "x11",

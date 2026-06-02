@@ -1,21 +1,372 @@
-//! WIP scaffold — zero-copy Servo demo for Bevy (0.19.0-rc.2, wgpu 29).
+//! Demo embedding Servo in a [Bevy] app, zero-copy.
 //!
-//! The full implementation is planned in
-//! `docs/2026-06-02_bevy_gpui_zero_copy_plan.md`, which records the verified
-//! Bevy 0.19 API: Servo as a `NonSend` resource in the main world exports a
-//! D3D12 shared handle; an `ExtractSchedule` system carries it to the render
-//! world; a `RenderSet::Prepare` system imports it onto Bevy's `RenderDevice`
-//! and injects a `GpuImage` (`RenderAssets::<GpuImage>::insert`) for a
-//! fullscreen `Sprite`'s `Handle<Image>`. `WgpuSettings` forces DX12.
+//! Bevy's render world runs on a separate thread, and Servo's surfman/GL context
+//! is `!Send`, so they can't share the import in-process. Instead this uses the
+//! shared-handle seam (the same reason the iced demo needs it):
 //!
-//! `keyutils` is staged for input forwarding once the render path lands.
-#![allow(dead_code)]
+//! - Servo lives in the **main world** as a `NonSend` resource. A main-world
+//!   system paints it and exports a D3D12 shared NT handle (a `Send` `u64`).
+//! - An `ExtractSchedule` system carries the handle into the **render world**.
+//! - A render-world system (after `PrepareAssets`, before `Queue`) opens the
+//!   handle on Bevy's `RenderDevice` and injects a `GpuImage` into
+//!   `RenderAssets<GpuImage>` for a fullscreen `Sprite`'s `Handle<Image>`.
+//!
+//! surfman/ANGLE is LUID-anchored to a throwaway HighPerformance-DX12 device and
+//! Bevy is forced to DX12 + HighPerformance, so both land on the same GPU.
+//! Windows + DX12 only.
 
-mod keyutils;
+#![allow(clippy::type_complexity)]
+
+use std::ffi::c_void;
+
+use bevy::asset::RenderAssetUsages;
+use bevy::image::Image;
+use bevy::prelude::*;
+use bevy::render::render_asset::RenderAssets;
+use bevy::render::render_resource::{
+    DefaultImageSampler, Extent3d, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureUsages, TextureViewDescriptor,
+};
+use bevy::render::renderer::{RenderDevice, RenderQueue};
+use bevy::render::settings::{Backends, PowerPreference, RenderCreation, WgpuSettings};
+use bevy::render::texture::GpuImage;
+use bevy::render::{Extract, ExtractSchedule, Render, RenderApp, RenderPlugin, RenderSystems};
+use bevy::window::{PrimaryWindow, WindowResolution};
+use grafting::{Dx12SharedTexture, HostWgpuContext, SyncMechanism, import_dx12_shared_texture};
+use rustls::crypto::aws_lc_rs;
+use servo::{
+    EventLoopWaker, Servo, ServoBuilder, WebView, WebViewBuilder, WebViewDelegate,
+};
+use servo_wgpu_interop_adapter::ServoWgpuInteropAdapter;
+use url::Url;
+use winit::dpi::PhysicalSize;
+
+const DEFAULT_WIDTH: u32 = 1280;
+const DEFAULT_HEIGHT: u32 = 800;
+
+// ── Servo side (main world, !Send) ───────────────────────────────────────────
+
+/// Non-`Send` Servo state, held as a `NonSend` resource on the main thread.
+struct ServoState {
+    servo: Servo,
+    webview: WebView,
+    interop: ServoWgpuInteropAdapter,
+    size: PhysicalSize<u32>,
+}
+
+/// The latest exported shared-handle frame (main world). `Send`.
+#[derive(Resource, Default, Clone, Copy)]
+struct ServoFrame(Option<FrameDesc>);
+
+#[derive(Clone, Copy)]
+struct FrameDesc {
+    handle: u64,
+    width: u32,
+    height: u32,
+    generation: u64,
+}
+
+/// The placeholder image the Servo frame is injected into (main world).
+#[derive(Resource, Clone)]
+struct ServoImage(Handle<Image>);
+
+// ── Render world mirrors (filled by ExtractSchedule) ─────────────────────────
+
+#[derive(Resource, Default, Clone, Copy)]
+struct ExtractedFrame(Option<FrameDesc>);
+
+#[derive(Resource, Default, Clone, Copy)]
+struct ExtractedImageId(Option<AssetId<Image>>);
+
+// ── Main ─────────────────────────────────────────────────────────────────────
 
 fn main() {
-    eprintln!(
-        "demo-servo-bevy is a WIP scaffold; see \
-         docs/2026-06-02_bevy_gpui_zero_copy_plan.md"
+    aws_lc_rs::default_provider()
+        .install_default()
+        .expect("failed to install rustls crypto provider");
+
+    let initial_url = demo_support::resolve_initial_url(env!("CARGO_MANIFEST_DIR"))
+        .expect("failed to resolve initial URL");
+
+    // Anchor surfman/ANGLE to a HighPerformance-DX12 GPU and run Servo on it.
+    // Bevy (forced to DX12 + HighPerformance below) lands on the same GPU, so the
+    // shared handle opened on Bevy's RenderDevice stays single-GPU.
+    let servo_state = build_servo(&initial_url);
+
+    let mut app = App::new();
+    app.add_plugins(
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "demo-servo-bevy".into(),
+                    resolution: WindowResolution::new(DEFAULT_WIDTH, DEFAULT_HEIGHT),
+                    ..default()
+                }),
+                ..default()
+            })
+            .set(RenderPlugin {
+                // Force DX12 + HighPerformance so Bevy's GPU matches surfman's.
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
+                    backends: Some(Backends::DX12),
+                    power_preference: PowerPreference::HighPerformance,
+                    ..default()
+                })),
+                ..default()
+            }),
     );
+
+    app.insert_non_send(servo_state)
+        .init_resource::<ServoFrame>()
+        .add_systems(Startup, setup)
+        .add_systems(Update, (drive_servo, fit_sprite_to_window));
+
+    // Render world: extract the handle, then inject the imported texture.
+    let render_app = app.sub_app_mut(RenderApp);
+    render_app
+        .init_resource::<ExtractedFrame>()
+        .init_resource::<ExtractedImageId>()
+        .add_systems(ExtractSchedule, extract_servo_frame)
+        .add_systems(
+            Render,
+            inject_servo_image
+                .after(RenderSystems::PrepareAssets)
+                .before(RenderSystems::Queue),
+        );
+
+    app.run();
+}
+
+fn build_servo(initial_url: &Url) -> ServoState {
+    let size = PhysicalSize::new(DEFAULT_WIDTH, DEFAULT_HEIGHT);
+
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::DX12,
+        flags: wgpu::InstanceFlags::default(),
+        memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+        backend_options: wgpu::BackendOptions::default(),
+        display: None,
+    });
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::HighPerformance,
+        force_fallback_adapter: false,
+        compatible_surface: None,
+    }))
+    .expect("no DX12 adapter for LUID anchoring");
+    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("servo-bevy-luid-anchor"),
+        required_features: wgpu::Features::empty(),
+        required_limits: wgpu::Limits::default(),
+        experimental_features: wgpu::ExperimentalFeatures::disabled(),
+        memory_hints: wgpu::MemoryHints::default(),
+        trace: wgpu::Trace::Off,
+    }))
+    .expect("failed to create LUID-anchor device");
+
+    let interop = ServoWgpuInteropAdapter::new(device, queue, size)
+        .expect("failed to create Servo interop adapter");
+
+    let servo = ServoBuilder::default()
+        .event_loop_waker(Box::new(NoopWaker))
+        .build();
+    servo.setup_logging();
+
+    let webview = WebViewBuilder::new(&servo, interop.rendering_context())
+        .url(initial_url.clone())
+        .hidpi_scale_factor(euclid::Scale::new(1.0))
+        .delegate(std::rc::Rc::new(DemoDelegate))
+        .build();
+
+    ServoState {
+        servo,
+        webview,
+        interop,
+        size,
+    }
+}
+
+// ── Startup: camera + fullscreen sprite on a placeholder image ───────────────
+
+fn setup(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+) {
+    commands.spawn(Camera2d);
+
+    // Placeholder image; its GpuImage is overwritten each frame in the render
+    // world with the imported Servo texture. RENDER_WORLD only (no CPU data).
+    let placeholder = Image::new_uninit(
+        Extent3d {
+            width: DEFAULT_WIDTH,
+            height: DEFAULT_HEIGHT,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        TextureFormat::Rgba8Unorm,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    let handle = images.add(placeholder);
+    commands.insert_resource(ServoImage(handle.clone()));
+
+    let size = windows
+        .single()
+        .map(|w| Vec2::new(w.width(), w.height()))
+        .unwrap_or(Vec2::new(DEFAULT_WIDTH as f32, DEFAULT_HEIGHT as f32));
+
+    commands.spawn(Sprite {
+        image: handle,
+        custom_size: Some(size),
+        // The imported texture is top-left origin; Bevy's 2D sprite samples with
+        // a y-up convention, so flip vertically to display the page upright.
+        flip_y: true,
+        ..default()
+    });
+}
+
+// ── Update (main world): drive Servo, export the frame, fit the sprite ───────
+
+fn drive_servo(
+    mut servo: NonSendMut<ServoState>,
+    mut frame: ResMut<ServoFrame>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+) {
+    servo.servo.spin_event_loop();
+
+    if let Ok(window) = windows.single() {
+        let phys = window.resolution.physical_size();
+        let new_size = PhysicalSize::new(phys.x.max(1), phys.y.max(1));
+        if new_size != servo.size {
+            servo.webview.resize(new_size);
+            servo.size = new_size;
+        }
+    }
+
+    servo.webview.paint();
+
+    match servo
+        .interop
+        .rendering_context_handle()
+        .current_dx12_shared_texture()
+    {
+        Ok(shared) => {
+            frame.0 = Some(FrameDesc {
+                handle: shared.handle as u64,
+                width: shared.size.width,
+                height: shared.size.height,
+                generation: shared.generation,
+            });
+        }
+        Err(e) => eprintln!("[bevy] shared-texture export failed: {e:?}"),
+    }
+}
+
+fn fit_sprite_to_window(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut sprites: Query<&mut Sprite>,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let size = Vec2::new(window.width(), window.height());
+    for mut sprite in &mut sprites {
+        if sprite.custom_size != Some(size) {
+            sprite.custom_size = Some(size);
+        }
+    }
+}
+
+// ── Render world: extract + inject ───────────────────────────────────────────
+
+fn extract_servo_frame(
+    frame: Extract<Res<ServoFrame>>,
+    image: Extract<Option<Res<ServoImage>>>,
+    mut out_frame: ResMut<ExtractedFrame>,
+    mut out_id: ResMut<ExtractedImageId>,
+) {
+    out_frame.0 = frame.0;
+    out_id.0 = image.as_ref().map(|i| i.0.id());
+}
+
+fn inject_servo_image(
+    frame: Res<ExtractedFrame>,
+    image_id: Res<ExtractedImageId>,
+    device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
+    default_sampler: Res<DefaultImageSampler>,
+    mut images: ResMut<RenderAssets<GpuImage>>,
+) {
+    let (Some(desc), Some(id)) = (frame.0, image_id.0) else {
+        return;
+    };
+
+    let shared = Dx12SharedTexture {
+        size: PhysicalSize::new(desc.width, desc.height),
+        format: TextureFormat::Rgba8Unorm,
+        generation: desc.generation,
+        producer_sync: SyncMechanism::None,
+        fence_value: 0,
+        handle: desc.handle as *mut c_void,
+    };
+    let host = HostWgpuContext::new(
+        device.wgpu_device().clone(),
+        (**render_queue.0).clone(),
+    );
+    let texture = match import_dx12_shared_texture(&shared, &host) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[bevy] import_dx12_shared_texture failed: {e:?}");
+            return;
+        }
+    };
+    let texture_view = texture.create_view(&TextureViewDescriptor::default());
+    let sampler = (***default_sampler).clone();
+
+    let gpu_image = GpuImage {
+        texture: texture.into(),
+        texture_view: texture_view.into(),
+        sampler: sampler.into(),
+        texture_descriptor: TextureDescriptor {
+            label: None,
+            size: Extent3d {
+                width: desc.width,
+                height: desc.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC,
+            view_formats: &[],
+        },
+        texture_view_descriptor: None,
+        had_data: true,
+    };
+    images.insert(id, gpu_image);
+}
+
+// ── Servo support ────────────────────────────────────────────────────────────
+
+#[derive(Clone)]
+struct NoopWaker;
+
+impl EventLoopWaker for NoopWaker {
+    fn clone_box(&self) -> Box<dyn EventLoopWaker> {
+        Box::new(self.clone())
+    }
+    fn wake(&self) {}
+}
+
+struct DemoDelegate;
+
+impl WebViewDelegate for DemoDelegate {
+    fn notify_url_changed(&self, _webview: WebView, url: Url) {
+        println!("[servo] URL changed: {url}");
+    }
+    fn notify_crashed(&self, _webview: WebView, reason: String, backtrace: Option<String>) {
+        eprintln!("[servo] CRASH: {reason}");
+        if let Some(bt) = backtrace {
+            eprintln!("{bt}");
+        }
+    }
 }

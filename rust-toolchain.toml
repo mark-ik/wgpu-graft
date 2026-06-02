@@ -1,6 +1,7 @@
 [toolchain]
-# Pinned to 1.92.0 because:
-#   - wgpu 29.0.1 requires rustc >= 1.92
-#   - iced 0.14.0 requires rustc >= 1.88
-# Do not lower below 1.92 — wgpu's HAL layer uses stabilized APIs from that release.
-channel = "1.92.0"
+# Pinned to 1.95.0 because:
+#   - bevy 0.19.0-rc.2 requires rustc >= 1.95 (demo-servo-bevy)
+#   - wgpu 29 requires rustc >= 1.92; iced/slint (wgpu 28) require >= 1.88
+# Do not lower below 1.92 — wgpu's HAL layer uses stabilized APIs from that
+# release; bevy 0.19 pulls the floor up to 1.95.
+channel = "1.95.0"

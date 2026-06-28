@@ -104,7 +104,7 @@ cargo run -p demo-servo-iced -- https://example.com
 - **Rust 1.95.0** (pinned in `rust-toolchain.toml`). The floor is 1.95 because
   Bevy 0.19.0-rc.2 requires it; wgpu 29 alone needs 1.92, and the iced/Slint
   (wgpu 28) demos need 1.88.
-- **Servo `release/v0.2`** for the Servo demos (resolved via the `servo` git
+- **Servo `release/v0.3`** for the Servo demos (resolved via the `servo` git
   dependency; no local Servo checkout needed).
 - **Windows**: ANGLE DLLs (`libEGL.dll`, `libGLESv2.dll`) must be next to the
   executable at runtime. They are built by `mozangle` during compilation (via the
@@ -113,6 +113,23 @@ cargo run -p demo-servo-iced -- https://example.com
   there too.
 - **Windows without nasm**: set `AWS_LC_SYS_NO_ASM=1` before building (Servo pulls
   `aws-lc-rs`).
+- **Windows clang toolchain (Servo demos)**: build from a **VS Developer Command
+  Prompt** so MSVC `cl.exe` is on PATH (`aws-lc-sys` and SpiderMonkey need it). If a
+  standalone LLVM is installed alongside Visual Studio's bundled clang, pin both the
+  compiler and bindgen to one clang version, or mozangle's bindgen step fails with
+  `use of undeclared identifier '__builtin_ia32_*'` in `mmintrin.h` (clang 21 dropped
+  the legacy MMX builtins that the clang-19-era ANGLE headers still reference, and
+  `LIBCLANG_PATH` defaulting to the newer clang while the compiler uses the older one
+  is the split):
+
+  ```cmd
+  set CC=clang-cl
+  set CXX=clang-cl
+  set LIBCLANG_PATH=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin
+  ```
+
+  If `cargo` can't fetch Servo's large git repo via libgit2, also set
+  `CARGO_NET_GIT_FETCH_WITH_CLI=true`.
 
 ## Platform support
 

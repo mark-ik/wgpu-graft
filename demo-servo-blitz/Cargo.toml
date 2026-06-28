@@ -11,7 +11,7 @@ euclid = "0.22.11"
 anyrender = "0.10"
 anyrender_vello = "0.10"
 vello = "0.9"
-servo = { git = "https://github.com/servo/servo", branch = "release/v0.2" }
+servo = { git = "https://github.com/servo/servo", branch = "release/v0.3" }
 rustls = "0.23.37"
 pollster = "0.4.0"
 grafting = { path = "../grafting" }

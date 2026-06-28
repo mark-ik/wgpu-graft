@@ -18,7 +18,7 @@ iced = { git = "https://github.com/iced-rs/iced", rev = "4255f613", default-feat
     "tokio",
     "image",
 ] }
-servo = { git = "https://github.com/servo/servo", branch = "release/v0.2" }
+servo = { git = "https://github.com/servo/servo", branch = "release/v0.3" }
 rustls = "0.23.37"
 pollster = "0.4.0"
 # wgpu-28 to match iced master; grafting + adapter must build with the same.

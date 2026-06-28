@@ -28,4 +28,4 @@ winit = "0.30.13"
 wgpu_29 = { package = "wgpu", version = "29.0.1", features = ["metal"], optional = true }
 wgpu_28 = { package = "wgpu", version = "28.0.0", features = ["metal"], optional = true }
 grafting = { path = "../grafting", version = "0.3.0", default-features = false, features = ["surfman"] }
-servo = { git = "https://github.com/servo/servo", branch = "release/v0.2", optional = true }
+servo = { git = "https://github.com/servo/servo", branch = "release/v0.3", optional = true }

@@ -22,7 +22,7 @@ bevy = { version = "0.19.0-rc.2", default-features = false, features = [
     "bevy_asset",
     "x11",
 ] }
-servo = { git = "https://github.com/servo/servo", branch = "release/v0.2" }
+servo = { git = "https://github.com/servo/servo", branch = "release/v0.3" }
 rustls = "0.23.37"
 pollster = "0.4.0"
 grafting = { path = "../grafting" }

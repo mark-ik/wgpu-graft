@@ -48,18 +48,23 @@ mod dx12_shared_texture;
 #[cfg(target_os = "windows")]
 pub use dx12_shared_texture::import_dx12_shared_texture;
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+#[cfg(all(
+    feature = "gl",
+    any(target_os = "linux", target_os = "android", target_os = "windows")
+))]
 mod gl_bindings {
     #![allow(unsafe_op_in_unsafe_fn)]
 
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
 
+#[cfg(feature = "gl")]
 pub mod raw_gl;
 
 #[cfg(feature = "surfman")]
 pub mod surfman_gl;
 
+#[cfg(feature = "gl")]
 use std::rc::Rc;
 
 use dpi::PhysicalSize;
@@ -114,6 +119,7 @@ pub enum TextureOrigin {
 #[non_exhaustive]
 pub enum NativeFrameKind {
     /// A GL framebuffer that will be imported via the platform-specific path.
+    #[cfg(feature = "gl")]
     GlFramebufferSource,
     /// A Vulkan external image (Linux DMABUF import).
     VulkanExternalImage,
@@ -247,6 +253,7 @@ pub struct ImportedTexture {
     pub consumer_sync: SyncMechanism,
 }
 
+#[cfg(feature = "gl")]
 pub struct GlFramebufferSource {
     size: PhysicalSize<u32>,
     generation: u64,
@@ -254,6 +261,7 @@ pub struct GlFramebufferSource {
     importer: Rc<dyn GlFramebufferSourceImpl>,
 }
 
+#[cfg(feature = "gl")]
 impl GlFramebufferSource {
     pub fn size(&self) -> PhysicalSize<u32> {
         self.size
@@ -377,6 +385,7 @@ pub struct Dx12SharedTexture {
 #[non_exhaustive]
 pub enum NativeFrame {
     /// A GL framebuffer — the primary, fully-implemented path.
+    #[cfg(feature = "gl")]
     GlFramebufferSource(GlFramebufferSource),
     /// A Linux DMABUF imported via Vulkan
     /// `VK_KHR_external_memory_fd` + `VK_EXT_image_drm_format_modifier`.
@@ -390,6 +399,7 @@ pub enum NativeFrame {
 impl NativeFrame {
     pub fn kind(&self) -> NativeFrameKind {
         match self {
+            #[cfg(feature = "gl")]
             NativeFrame::GlFramebufferSource(_) => NativeFrameKind::GlFramebufferSource,
             NativeFrame::VulkanExternalImage(_) => NativeFrameKind::VulkanExternalImage,
             NativeFrame::MetalTextureRef(_) => NativeFrameKind::MetalTextureRef,
@@ -399,6 +409,7 @@ impl NativeFrame {
 
     pub fn producer_sync(&self) -> SyncMechanism {
         match self {
+            #[cfg(feature = "gl")]
             NativeFrame::GlFramebufferSource(frame) => frame.producer_sync(),
             NativeFrame::VulkanExternalImage(frame) => frame.producer_sync,
             NativeFrame::MetalTextureRef(frame) => frame.producer_sync,
@@ -451,7 +462,9 @@ pub struct WgpuTextureImporter {
     host: HostWgpuContext,
     synchronizer: Box<dyn InteropSynchronizer>,
     /// Copies a bottom-left aliased import into a fresh, host-owned, top-left
-    /// `Rgba8Unorm` texture (see [`import_frame`](Self::import_frame)).
+    /// `Rgba8Unorm` texture (see [`import_frame`](Self::import_frame)). Only the
+    /// GL framebuffer path produces bottom-left frames, so this is `gl`-only.
+    #[cfg(feature = "gl")]
     normalizer: crate::raw_gl::texture_normalizer::ImportedTextureNormalizer,
 }
 
@@ -466,11 +479,13 @@ impl WgpuTextureImporter {
         host: HostWgpuContext,
         synchronizer: Box<dyn InteropSynchronizer>,
     ) -> Self {
+        #[cfg(feature = "gl")]
         let normalizer =
             crate::raw_gl::texture_normalizer::ImportedTextureNormalizer::new(&host.device);
         Self {
             host,
             synchronizer,
+            #[cfg(feature = "gl")]
             normalizer,
         }
     }
@@ -490,7 +505,13 @@ impl TextureImporter for WgpuTextureImporter {
         self.synchronizer
             .producer_complete(frame, frame.producer_sync())?;
 
+        // `options` drives the GL bottom-left normalize pass only; the
+        // shared-texture paths return top-left already.
+        #[cfg(not(feature = "gl"))]
+        let _ = options;
+
         let imported = match frame {
+            #[cfg(feature = "gl")]
             NativeFrame::GlFramebufferSource(frame_source) => {
                 frame_source
                     .importer
@@ -509,6 +530,7 @@ impl TextureImporter for WgpuTextureImporter {
         // alias across frames otherwise races with the producer and flickers.
         // Paths that already return a normalized top-left texture (Metal) are
         // left untouched.
+        #[cfg(feature = "gl")]
         let imported = if options.normalize_origin && imported.origin == TextureOrigin::BottomLeft {
             let texture = self.normalizer.normalize(
                 &self.host.device,
@@ -617,6 +639,7 @@ impl CapabilityMatrix {
     }
 }
 
+#[cfg(feature = "gl")]
 pub trait GlFramebufferSourceImpl {
     fn import_into(
         &self,

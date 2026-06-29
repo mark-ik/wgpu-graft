@@ -5,6 +5,14 @@ use std::path::Path;
 use gl_generator::{Api, Fallbacks, Profile, Registry, StructGenerator};
 
 fn main() {
+    // The GL bindings back the `gl` feature's raw_gl path only. Non-GL consumers
+    // (wgpu-weld, wgpu-scry's shared-texture import) build grafting without `gl`,
+    // so skip the codegen entirely — `lib.rs`'s `gl_bindings` module is gated the
+    // same way and never `include!`s the missing file.
+    if env::var_os("CARGO_FEATURE_GL").is_none() {
+        return;
+    }
+
     let out = env::var("OUT_DIR").unwrap();
     let out = Path::new(&out);
 

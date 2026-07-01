@@ -23,10 +23,10 @@ mod sync;
 
 #[cfg(target_os = "windows")]
 mod sync_dx12;
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-mod sync_vulkan;
 #[cfg(target_vendor = "apple")]
 mod sync_metal;
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+mod sync_vulkan;
 
 #[cfg(target_os = "linux")]
 pub mod vulkan_dmabuf;
@@ -73,10 +73,10 @@ pub use sync::{ImplicitOnlySynchronizer, InteropSynchronizer, NoopSynchronizer, 
 
 #[cfg(target_os = "windows")]
 pub use sync_dx12::Dx12FenceSynchronizer;
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-pub use sync_vulkan::VulkanSemaphoreSynchronizer;
 #[cfg(target_vendor = "apple")]
 pub use sync_metal::MetalSharedEventSynchronizer;
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+pub use sync_vulkan::VulkanSemaphoreSynchronizer;
 
 /// The wgpu graphics backend in use on the host device.
 ///
@@ -496,6 +496,192 @@ impl WgpuTextureImporter {
     }
 }
 
+/// A frame classified by whether its shared resource changed.
+///
+/// Use [`NewResource`](Self::NewResource) when the producer reports a new
+/// resource epoch and can supply the native frame handle. Use
+/// [`ReusedResource`](Self::ReusedResource) for later frames that overwrite the
+/// same shared allocation in place.
+pub enum EpochFrame<'a> {
+    NewResource {
+        resource_epoch: u64,
+        frame: &'a NativeFrame,
+    },
+    ReusedResource {
+        resource_epoch: u64,
+    },
+}
+
+struct CachedEpochTexture {
+    resource_epoch: u64,
+    imported: ImportedTexture,
+}
+
+/// Import cache keyed by producer resource epoch.
+///
+/// This wrapper imports a native frame only when the producer changes the
+/// shared allocation. For reused resources it keeps sampling the cached
+/// `wgpu::Texture` and submits a tiny texture-to-buffer copy each frame so the
+/// host queue observes in-place producer writes.
+pub struct EpochCachedImporter {
+    importer: WgpuTextureImporter,
+    cached: Option<CachedEpochTexture>,
+    cache_flush_buffer: Option<wgpu::Buffer>,
+}
+
+impl EpochCachedImporter {
+    pub fn new(host: HostWgpuContext) -> Self {
+        Self::from_importer(WgpuTextureImporter::new(host))
+    }
+
+    pub fn with_synchronizer(
+        host: HostWgpuContext,
+        synchronizer: Box<dyn InteropSynchronizer>,
+    ) -> Self {
+        Self::from_importer(WgpuTextureImporter::with_synchronizer(host, synchronizer))
+    }
+
+    pub fn from_importer(importer: WgpuTextureImporter) -> Self {
+        Self {
+            importer,
+            cached: None,
+            cache_flush_buffer: None,
+        }
+    }
+
+    pub fn host(&self) -> &HostWgpuContext {
+        self.importer.host()
+    }
+
+    pub fn imported(&self) -> Option<&ImportedTexture> {
+        self.cached.as_ref().map(|cached| &cached.imported)
+    }
+
+    pub fn resource_epoch(&self) -> Option<u64> {
+        self.cached.as_ref().map(|cached| cached.resource_epoch)
+    }
+
+    pub fn update(
+        &mut self,
+        frame: EpochFrame<'_>,
+        options: &ImportOptions,
+    ) -> Result<&ImportedTexture, InteropError> {
+        match frame {
+            EpochFrame::NewResource {
+                resource_epoch,
+                frame,
+            } => {
+                if self.resource_epoch() != Some(resource_epoch) {
+                    let imported = self.importer.import_frame(frame, options)?;
+                    self.cached = Some(CachedEpochTexture {
+                        resource_epoch,
+                        imported,
+                    });
+                }
+            }
+            EpochFrame::ReusedResource { resource_epoch } => {
+                if self.resource_epoch() != Some(resource_epoch) {
+                    return Err(InteropError::InvalidFrame(
+                        "reused resource epoch has no matching cached import",
+                    ));
+                }
+            }
+        }
+
+        self.flush_cached_texture()?;
+        self.imported().ok_or(InteropError::InvalidFrame(
+            "epoch cache update produced no texture",
+        ))
+    }
+
+    fn flush_cached_texture(&mut self) -> Result<(), InteropError> {
+        let Self {
+            importer,
+            cached,
+            cache_flush_buffer,
+        } = self;
+        let Some(cached) = cached.as_ref() else {
+            return Ok(());
+        };
+
+        if cached.imported.size.width == 0 || cached.imported.size.height == 0 {
+            return Ok(());
+        }
+
+        let device = &importer.host.device;
+        let queue = &importer.host.queue;
+        let flush_buffer = cache_flush_buffer.get_or_insert_with(|| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("grafting epoch-cache flush"),
+                size: wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u64,
+                usage: wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("grafting epoch-cache flush"),
+        });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &cached.imported.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: flush_buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT),
+                    rows_per_image: Some(1),
+                },
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit(std::iter::once(encoder.finish()));
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+/// Close a Windows NT shared handle.
+///
+/// Shared-handle producers transfer responsibility for the caller-owned handle
+/// copy to the host. Importers open their own reference, then the host should
+/// close its copy with this helper.
+///
+/// # Safety
+///
+/// `handle` must be a Windows `HANDLE` value owned by the caller. It must not be
+/// used after this function returns `Ok(())`.
+pub unsafe fn close_shared_handle(handle: *mut std::ffi::c_void) -> Result<(), InteropError> {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+
+    let handle = HANDLE(handle);
+    if handle.is_invalid() {
+        return Ok(());
+    }
+    unsafe { CloseHandle(handle) }
+        .map(|_| ())
+        .map_err(|err| InteropError::Dx12(format!("CloseHandle failed: {err}")))
+}
+
+#[cfg(not(target_os = "windows"))]
+/// No-op shared-handle closer for non-Windows builds.
+///
+/// # Safety
+///
+/// This function exists so cross-platform hosts can call one helper at the API
+/// boundary. It does not dereference or close `handle`.
+pub unsafe fn close_shared_handle(_handle: *mut std::ffi::c_void) -> Result<(), InteropError> {
+    Ok(())
+}
+
 impl TextureImporter for WgpuTextureImporter {
     fn import_frame(
         &self,
@@ -517,7 +703,9 @@ impl TextureImporter for WgpuTextureImporter {
                     .importer
                     .import_into(frame_source, &self.host, options)
             }
-            NativeFrame::VulkanExternalImage(frame) => import_vulkan_external_image(frame, &self.host),
+            NativeFrame::VulkanExternalImage(frame) => {
+                import_vulkan_external_image(frame, &self.host)
+            }
             NativeFrame::MetalTextureRef(frame) => import_metal_texture_ref(frame, &self.host),
             NativeFrame::Dx12SharedTexture(frame) => import_dx12_shared_frame(frame, &self.host),
         }?;
@@ -828,8 +1016,7 @@ mod tests {
                 vulkan.vulkan_external_image,
                 CapabilityStatus::Unsupported(UnsupportedReason::VulkanDmabufExtensionNotEnabled)
             );
-            let vulkan_with_dmabuf =
-                CapabilityMatrix::for_host(InteropBackend::Vulkan, true);
+            let vulkan_with_dmabuf = CapabilityMatrix::for_host(InteropBackend::Vulkan, true);
             assert_eq!(
                 vulkan_with_dmabuf.vulkan_external_image,
                 CapabilityStatus::Supported
